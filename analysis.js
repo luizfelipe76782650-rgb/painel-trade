@@ -673,3 +673,194 @@ export function calibrar(candles, opts = {}) {
     aprovado: !!fora && !!padrao && fora.porOp > padrao.porOp && fora.porOp > 0,
   };
 }
+
+/**
+ * Entry families.
+ *
+ * Each one reads the visible window and either proposes a trade or stays out.
+ * They are deliberately different ideas rather than variations of one — a
+ * panel that can only test its own hypothesis can only ever confirm it.
+ *
+ * Every family returns its stop and target as multiples of ATR, so the engine
+ * can place them against the real fill price rather than the signal price.
+ */
+export const FAMILIAS = {
+  zonas: {
+    nome: "Zonas de suporte e resistência",
+    conta: "Entra quando o preço encosta numa zona com o placar a favor.",
+    gerar(v, atr, opts) {
+      const fl = flowFromCandles(v, opts.flowBars);
+      const r = analyse(v, {
+        depth: opts.depth,
+        zoneLimit: opts.zoneLimit,
+        flow: fl ? { ...fl, total: fl.buy + fl.sell } : null,
+      });
+      if (!r.plan || r.plan.side === "fora") return null;
+
+      const risco = Math.abs(r.plan.entrada - r.plan.stop) / atr;
+      const ganho = Math.abs(r.plan.alvo - r.plan.entrada) / atr;
+      return { side: r.plan.side, stop: -risco, alvo: ganho };
+    },
+  },
+
+  reversao: {
+    nome: "Reversão à média",
+    conta: "Entra contra o movimento quando o preço se afasta demais da média.",
+    gerar(v, atr) {
+      const c = v[v.length - 1];
+      const janela = v.slice(-20);
+      const media = janela.reduce((soma, x) => soma + x.close, 0) / janela.length;
+      const distancia = (c.close - media) / atr;
+
+      if (distancia > 2.2) return { side: "venda", stop: -1.5, alvo: Math.abs(distancia) };
+      if (distancia < -2.2) return { side: "compra", stop: -1.5, alvo: Math.abs(distancia) };
+      return null;
+    },
+  },
+
+  rompimento: {
+    nome: "Rompimento",
+    conta: "Entra a favor quando o preço fecha além da máxima ou mínima de 20 barras.",
+    gerar(v) {
+      const c = v[v.length - 1];
+      const janela = v.slice(-21, -1);
+      const topo = Math.max(...janela.map((x) => x.high));
+      const fundo = Math.min(...janela.map((x) => x.low));
+
+      if (c.close > topo) return { side: "compra", stop: -1.5, alvo: 3 };
+      if (c.close < fundo) return { side: "venda", stop: -1.5, alvo: 3 };
+      return null;
+    },
+  },
+
+  sweep: {
+    nome: "Sweep e recuperação",
+    conta: "Entra quando o preço fura um extremo e fecha de volta para dentro.",
+    gerar(v, atr) {
+      const c = v[v.length - 1];
+      const janela = v.slice(-21, -1);
+      const topo = Math.max(...janela.map((x) => x.high));
+      const fundo = Math.min(...janela.map((x) => x.low));
+
+      if (c.low < fundo && c.close > fundo) {
+        const risco = (c.close - c.low) / atr + 0.2;
+        return { side: "compra", stop: -risco, alvo: risco * 2 };
+      }
+      if (c.high > topo && c.close < topo) {
+        const risco = (c.high - c.close) / atr + 0.2;
+        return { side: "venda", stop: -risco, alvo: risco * 2 };
+      }
+      return null;
+    },
+  },
+
+  delta: {
+    nome: "Divergência de agressão",
+    conta: "Entra quando o preço faz um extremo novo e a agressão não acompanha.",
+    gerar(v, atr) {
+      const c = v[v.length - 1];
+      const janela = v.slice(-20);
+      if (!janela.every((x) => typeof x.delta === "number")) return null;
+
+      const anteriores = janela.slice(0, -1);
+      const fundo = Math.min(...anteriores.map((x) => x.low));
+      const topo = Math.max(...anteriores.map((x) => x.high));
+      const meio = Math.floor(janela.length / 2);
+      const antes = janela.slice(0, meio).reduce((soma, x) => soma + x.delta, 0);
+      const agora = janela.slice(meio).reduce((soma, x) => soma + x.delta, 0);
+
+      if (c.low < fundo && agora > antes) return { side: "compra", stop: -1, alvo: 2 };
+      if (c.high > topo && agora < antes) return { side: "venda", stop: -1, alvo: 2 };
+      return null;
+    },
+  },
+};
+
+/**
+ * Runs a family over history and reports what it would have done.
+ *
+ * A signal is read from a bar that has already closed, so the trade opens on
+ * the next bar at its open — the first price the decision could actually have
+ * been filled at. Measuring against the signal bar instead is the single
+ * mistake that makes a backtest promise things the market never offered.
+ */
+export function testarFamilia(candles, familia, opts = {}) {
+  const {
+    flowBars = 12,
+    janela = 400,
+    taxa = 0.0002,
+    depth = 0.5,
+    zoneLimit = 6,
+    rrMinimo = 1,
+  } = opts;
+
+  const ideia = FAMILIAS[familia];
+  if (!ideia || candles.length < janela + 100) return null;
+
+  const operacoes = [];
+  const curva = [];
+  let aberta = null;
+  let r = 0;
+  let custos = 0;
+
+  for (let i = janela; i < candles.length; i++) {
+    const vista = candles.slice(i - janela, i);
+
+    if (aberta) {
+      const fim = acompanharStop(aberta, vista, aberta.atr, pivots(vista));
+      aberta.stop = fim.stop;
+
+      if (fim.resultado) {
+        const riscoPct = Math.abs(aberta.entrada - aberta.stopInicial) / aberta.entrada;
+        const custo = riscoPct > 0 ? taxa / riscoPct : 0;
+        const liquido = fim.r - custo;
+
+        r += liquido;
+        custos += custo;
+        operacoes.push({ ...aberta, resultado: fim.resultado, r: liquido, custo });
+        curva.push(r);
+        aberta = null;
+      }
+      continue;
+    }
+
+    const a = atr(vista);
+    const proxima = candles[i];
+    if (!(a > 0) || !proxima) continue;
+
+    const sinal = ideia.gerar(vista, a, { flowBars, depth, zoneLimit });
+    if (!sinal) continue;
+
+    const entrada = proxima.open;
+    const direcao = sinal.side === "compra" ? 1 : -1;
+    const stop = entrada + a * sinal.stop * direcao;
+    const alvo = entrada + a * sinal.alvo * direcao;
+    const risco = Math.abs(entrada - stop);
+    const ganho = Math.abs(alvo - entrada);
+
+    if (!(risco > 0) || ganho / risco < rrMinimo) continue;
+
+    aberta = {
+      side: sinal.side,
+      entrada,
+      stop,
+      alvo,
+      rr: ganho / risco,
+      stopInicial: stop,
+      atr: a,
+      abertura: proxima.time,
+    };
+  }
+
+  const ganhos = operacoes.filter((o) => o.r > 0).length;
+
+  return {
+    total: operacoes.length,
+    curva,
+    r,
+    porOp: operacoes.length ? r / operacoes.length : 0,
+    taxa: operacoes.length ? (ganhos / operacoes.length) * 100 : 0,
+    custoMedio: operacoes.length ? custos / operacoes.length : 0,
+    barras: candles.length - janela,
+  };
+}

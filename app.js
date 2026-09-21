@@ -1,4 +1,5 @@
 import {
+  FAMILIAS,
   acompanharStop,
   analyse,
   backtest,
@@ -7,10 +8,11 @@ import {
   pivots,
   sma,
   cvdSeries,
+  testarFamilia,
   varrer,
   volumeProfile,
   zoneStats,
-} from "./analysis.js?v=20";
+} from "./analysis.js?v=21";
 import {
   CATEGORIES,
   JANELA,
@@ -25,7 +27,7 @@ import {
   spotGold,
   tape,
   universe,
-} from "./feed.js?v=20";
+} from "./feed.js?v=21";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const el = (id) => document.getElementById(id);
@@ -96,6 +98,9 @@ const state = {
   ficha: null,
   fichando: false,
   fichaPasso: null,
+  lab: null,
+  labRodando: false,
+  familia: "zonas",
   ranking: null,
   rankeando: false,
   rankingPasso: null,
@@ -492,6 +497,8 @@ function reload() {
   escanear();
   renderFicha();
   renderRanking();
+  state.lab = null;
+  renderLab();
 }
 
 /** Refills the asset picker for the chosen group, from the live listing. */
@@ -1481,6 +1488,14 @@ function mountDeep() {
         <div id="fichaBody" class="deep-body"></div>
       </div>
 
+      <div class="card deep-card" id="cardLab">
+        <div class="plan-head">
+          <span class="lbl">LABORATÓRIO DE IDEIAS</span>
+          <span class="muted" id="labInfo">—</span>
+        </div>
+        <div id="labBody" class="deep-body"></div>
+      </div>
+
       <div class="card deep-card" id="cardRank">
         <div class="plan-head">
           <span class="lbl">RANKING DOS ATIVOS</span>
@@ -1507,7 +1522,7 @@ function mountDeep() {
     </div>`;
 
   ["posSym", "posBody", "perfilInfo", "perfilBody", "placarInfo", "placarBody",
-   "sessaoInfo", "sessaoBody", "btInfo", "btBody", "baleiaInfo", "baleiaBody", "fichaInfo", "fichaBody", "rankInfo", "rankBody"].forEach((id) => (R[id] = el(id)));
+   "sessaoInfo", "sessaoBody", "btInfo", "btBody", "baleiaInfo", "baleiaBody", "fichaInfo", "fichaBody", "rankInfo", "rankBody", "labInfo", "labBody"].forEach((id) => (R[id] = el(id)));
 }
 
 /** A line chart small enough to read as a shape rather than a chart. */
@@ -2554,7 +2569,7 @@ const config = {
     mostrarDica: true,
     som: true,
     taxa: 0.0002,
-    cards: { pos: true, perfil: true, bt: true, ficha: true, rank: true, baleia: true, placar: true, sessao: true },
+    cards: { pos: true, perfil: true, bt: true, ficha: true, lab: true, rank: true, baleia: true, placar: true, sessao: true },
   },
 
   atual: null,
@@ -2626,6 +2641,7 @@ function aplicarConfig() {
   mostra("cardBt", c.cards.bt);
   mostra("cardFicha", c.cards.ficha !== false);
   mostra("cardRank", c.cards.rank !== false);
+  mostra("cardLab", c.cards.lab !== false);
   mostra("cardBaleia", c.cards.baleia);
   mostra("cardPlacar", c.cards.placar);
   mostra("cardSessao", c.cards.sessao);
@@ -2686,6 +2702,7 @@ function abrirConfig() {
   marcar("cfgCardBt", c.cards.bt);
   marcar("cfgCardFicha", c.cards.ficha !== false);
   marcar("cfgCardRank", c.cards.rank !== false);
+  marcar("cfgCardLab", c.cards.lab !== false);
   marcar("cfgCardBaleia", c.cards.baleia);
   marcar("cfgCardPlacar", c.cards.placar);
   marcar("cfgCardSessao", c.cards.sessao);
@@ -2712,6 +2729,7 @@ function salvarConfig() {
       bt: el("cfgCardBt").checked,
       ficha: el("cfgCardFicha").checked,
       rank: el("cfgCardRank").checked,
+      lab: el("cfgCardLab").checked,
       baleia: el("cfgCardBaleia").checked,
       placar: el("cfgCardPlacar").checked,
       sessao: el("cfgCardSessao").checked,
@@ -3377,6 +3395,135 @@ function renderRanking() {
   );
 }
 
+// ---------------------------------------------------------------- laboratório
+/**
+ * Runs any of the entry families against the asset on screen.
+ *
+ * Both halves are reported side by side and neither is hidden: a family that
+ * only works on the half it was looked at is exactly the thing a panel should
+ * be able to show you, rather than the thing it quietly rounds away.
+ */
+async function medirFamilia() {
+  if (state.labRodando) return;
+  state.labRodando = true;
+  state.lab = null;
+  renderLab();
+
+  try {
+    const velas = await history(state.symbol, state.timeframe, 3000);
+    const uteis = (velas?.length || 0) - JANELA;
+
+    if (!velas || uteis < 600) {
+      state.lab = { erro: "Histórico curto demais para dividir em duas metades." };
+      return;
+    }
+
+    const corte = Math.floor(uteis / 2) + JANELA;
+    const opts = {
+      flowBars: FLOW_BARS[state.timeframe] || 12,
+      janela: JANELA,
+      taxa: taxaAtual(),
+      depth: state.depth,
+      zoneLimit: state.zones,
+    };
+
+    await respirar();
+    const primeira = testarFamilia(velas.slice(0, corte), state.familia, opts);
+    await respirar();
+    const segunda = testarFamilia(velas.slice(corte - JANELA), state.familia, opts);
+    await respirar();
+    const tudo = testarFamilia(velas, state.familia, opts);
+
+    state.lab = {
+      familia: state.familia,
+      symbol: state.symbol,
+      timeframe: state.timeframe,
+      primeira,
+      segunda,
+      tudo,
+    };
+  } catch (err) {
+    state.lab = { erro: err.message };
+  } finally {
+    state.labRodando = false;
+    renderLab();
+  }
+}
+
+function renderLab() {
+  const ideia = FAMILIAS[state.familia];
+  R.labInfo.textContent = `${state.symbol.replace(/^f:/, "")} · ${state.timeframe}`;
+
+  const seletor = `<select class="mini largo-sel" id="labFamilia">${Object.entries(FAMILIAS)
+    .map(
+      ([k, v]) =>
+        `<option value="${k}"${k === state.familia ? " selected" : ""}>${esc(v.nome)}</option>`
+    )
+    .join("")}</select>`;
+
+  const cabeca = `<div class="lab-topo">${seletor}
+      <button class="btn mini-btn" id="labBotao" ${state.labRodando ? "disabled" : ""}>${
+        state.labRodando ? "medindo…" : "medir"
+      }</button>
+    </div>
+    <div class="nota">${esc(ideia.conta)}</div>`;
+
+  const lab = state.lab;
+  let corpo = "";
+
+  if (lab?.erro) {
+    corpo = `<div class="vazio">${esc(lab.erro)}</div>`;
+  } else if (lab?.tudo) {
+    const cor = (v) => (v > 0 ? UP : v < 0 ? DOWN : NEU);
+    const num = (v) => `${v >= 0 ? "+" : ""}${v.toFixed(3)}R`;
+    const meia = (t, b) =>
+      b
+        ? `<div class="metrica"><span class="m-rot">${t}</span>
+             <span class="m-val" style="color:${cor(b.porOp)}">${num(b.porOp)}</span>
+             <span class="m-sub">${b.total} op · ${b.taxa.toFixed(0)}%</span></div>`
+        : `<div class="metrica"><span class="m-rot">${t}</span>
+             <span class="m-val">—</span></div>`;
+
+    const consistente =
+      lab.primeira?.porOp > 0 && lab.segunda?.porOp > 0 && lab.tudo.total >= 20;
+
+    corpo = `<div class="metricas">
+        ${meia("1ª METADE", lab.primeira)}
+        ${meia("2ª METADE", lab.segunda)}
+        ${meia("TUDO", lab.tudo)}
+        <div class="metrica"><span class="m-rot">TAXA</span>
+          <span class="m-val">${lab.tudo.custoMedio.toFixed(3)}R</span>
+          <span class="m-sub">por operação</span></div>
+      </div>
+
+      <div class="spark-box">
+        <span class="m-rot">CURVA · PERÍODO INTEIRO</span>
+        ${sparkline(lab.tudo.curva.length > 1 ? [0, ...lab.tudo.curva] : null, cor(lab.tudo.r), 44)}
+      </div>
+
+      <div class="veredito ${consistente ? "bom" : "ruim"}">
+        ${consistente ? "POSITIVA NAS DUAS METADES" : "NÃO SE SUSTENTA NAS DUAS"}
+      </div>
+
+      <div class="nota">Uma ideia que só ganha numa das metades ganhou daquele pedaço de
+        passado, não do mercado. Entrada na abertura da barra seguinte ao sinal, com a
+        corretagem escolhida descontada.</div>`;
+  } else {
+    corpo = `<div class="vazio">Escolhe uma ideia de entrada e mede neste ativo. As duas
+      metades do histórico aparecem separadas — é assim que se vê se a ideia funciona ou
+      se apenas decorou o passado.</div>`;
+  }
+
+  swap(R.labBody, "lab", cabeca + corpo);
+
+  el("labBotao")?.addEventListener("click", medirFamilia);
+  el("labFamilia")?.addEventListener("change", (e) => {
+    state.familia = e.target.value;
+    state.lab = null;
+    renderLab();
+  });
+}
+
 // ---------------------------------------------------------------- start
 const cfgInicial = config.load();
 state.symbol = cfgInicial.ativo;
@@ -3386,6 +3533,7 @@ mount();
 mountDeep();
 renderFicha();
 renderRanking();
+renderLab();
 ligarMascote();
 ligarConta();
 buildControls();

@@ -2254,3 +2254,16 @@ button {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+
+/* ---------- laboratório ---------- */
+.lab-topo {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+}
+
+.largo-sel {
+  flex-grow: 1;
+  min-width: 0;
+  height: 28px;
+}
