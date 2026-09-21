@@ -21,12 +21,23 @@
     <link rel="apple-touch-icon" href="./icone.svg" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <link rel="stylesheet" href="./style.css?v=10" />
+    <link rel="stylesheet" href="./style.css?v=11" />
   </head>
   <body>
     <div class="app">
       <!-- fita de cotações -->
-      <div class="tape-strip"><div class="tape" id="tape"></div></div>
+      <div class="tape-strip">
+        <div class="tape" id="tape"></div>
+      <button class="conta" id="conta" type="button" aria-label="Conta e configurações">
+        <span class="conta-avatar">
+          <img id="contaFoto" alt="" hidden />
+          <span id="contaLetra">?</span>
+        </span>
+        <span class="conta-nome" id="contaNome">Entrar</span>
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="3" stroke-linecap="round"><path d="M6 9l6 6 6-6" /></svg>
+      </button>
+      </div>
 
       <div class="body">
         <!-- coluna esquerda -->
@@ -101,6 +112,91 @@
       <span class="mascote-selo" id="mascoteSelo" hidden>0</span>
     </button>
 
+    <div class="modal" id="config" hidden>
+      <div class="modal-caixa" role="dialog" aria-label="Configurações">
+        <header class="modal-topo">
+          <span class="modal-titulo">CONFIGURAÇÕES</span>
+          <button class="balao-x" id="cfgFechar" type="button" aria-label="Fechar">×</button>
+        </header>
+
+        <div class="modal-corpo">
+          <section class="cfg-bloco">
+            <span class="cfg-rotulo">PERFIL</span>
+            <div class="cfg-perfil">
+              <div class="cfg-foto" id="cfgFoto">?</div>
+              <div class="cfg-perfil-lado">
+                <input class="cfg-campo" id="cfgNome" type="text" maxlength="40"
+                  placeholder="seu nome" autocomplete="name" />
+                <div class="cfg-linha-botoes">
+                  <label class="btn mini-btn cfg-arquivo">
+                    escolher foto
+                    <input type="file" id="cfgArquivo" accept="image/*" hidden />
+                  </label>
+                  <button class="btn" id="cfgTirarFoto" type="button">remover</button>
+                </div>
+              </div>
+            </div>
+            <p class="cfg-nota">A foto fica só neste aparelho, reduzida para 160 pixels.
+              Quando houver conta, ela passa a acompanhar você.</p>
+          </section>
+
+          <section class="cfg-bloco">
+            <span class="cfg-rotulo">ABRIR EM</span>
+            <div class="cfg-linha">
+              <span class="cfg-texto">Salvo: <b id="cfgAtualSalvo">BTC · 5m</b></span>
+              <button class="btn" id="cfgUsarAtual" type="button">usar o atual
+                (<span id="cfgPadrao">—</span>)</button>
+            </div>
+          </section>
+
+          <section class="cfg-bloco">
+            <span class="cfg-rotulo">O QUE O MASCOTE AVISA</span>
+            <label class="cfg-opcao"><input type="checkbox" id="cfgEntrada" />
+              <span>Entrada confirmada</span></label>
+            <label class="cfg-opcao"><input type="checkbox" id="cfgResultado" />
+              <span>Stop ou alvo atingido</span></label>
+            <label class="cfg-opcao"><input type="checkbox" id="cfgMascote" />
+              <span>Mostrar o mascote</span></label>
+            <label class="cfg-opcao"><input type="checkbox" id="cfgDica" />
+              <span>Mostrar a varredura dos tempos</span></label>
+          </section>
+
+          <section class="cfg-bloco">
+            <span class="cfg-rotulo">BLOCOS DO DETALHE</span>
+            <label class="cfg-opcao"><input type="checkbox" id="cfgCardPos" />
+              <span>Fluxo e posicionamento</span></label>
+            <label class="cfg-opcao"><input type="checkbox" id="cfgCardPerfil" />
+              <span>Perfil de volume</span></label>
+            <label class="cfg-opcao"><input type="checkbox" id="cfgCardBt" />
+              <span>Medição da estratégia</span></label>
+            <label class="cfg-opcao"><input type="checkbox" id="cfgCardBaleia" />
+              <span>Negócios grandes</span></label>
+            <label class="cfg-opcao"><input type="checkbox" id="cfgCardPlacar" />
+              <span>Placar das operações</span></label>
+            <label class="cfg-opcao"><input type="checkbox" id="cfgCardSessao" />
+              <span>Sessão</span></label>
+          </section>
+
+          <section class="cfg-bloco">
+            <span class="cfg-rotulo">HISTÓRICO</span>
+            <div class="cfg-linha-botoes">
+              <button class="btn" id="cfgExportar" type="button">baixar CSV</button>
+              <button class="btn cfg-perigo" id="cfgLimpar" type="button">apagar histórico</button>
+            </div>
+            <p class="cfg-nota" id="cfgAviso"></p>
+          </section>
+        </div>
+
+        <footer class="modal-pe">
+          <span class="cfg-nota">Ferramenta de análise. Não é recomendação de investimento.</span>
+          <div class="cfg-linha-botoes">
+            <button class="btn" id="cfgCancelar" type="button">cancelar</button>
+            <button class="btn mini-btn" id="cfgSalvar" type="button">salvar</button>
+          </div>
+        </footer>
+      </div>
+    </div>
+
     <div class="dica" id="dica" hidden>
       <button class="dica-x" id="dicaX" type="button" aria-label="Dispensar">×</button>
       <button class="dica-corpo" id="dicaCorpo" type="button"></button>
@@ -116,6 +212,6 @@
       <div class="balao-lista" id="balaoLista"></div>
     </div>
 
-    <script type="module" src="./app.js?v=10"></script>
+    <script type="module" src="./app.js?v=11"></script>
   </body>
 </html>

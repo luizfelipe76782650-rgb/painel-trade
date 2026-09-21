@@ -8,7 +8,7 @@ import {
   varrer,
   volumeProfile,
   zoneStats,
-} from "./analysis.js?v=10";
+} from "./analysis.js?v=11";
 import {
   CATEGORIES,
   assetSource,
@@ -22,7 +22,7 @@ import {
   spotGold,
   tape,
   universe,
-} from "./feed.js?v=10";
+} from "./feed.js?v=11";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const el = (id) => document.getElementById(id);
@@ -2025,7 +2025,7 @@ function vigiar() {
 
   // uma operação abriu
   const chaveAberta = state.aberta ? `${state.aberta.side}:${state.aberta.abertura}` : null;
-  if (chaveAberta && chaveAberta !== v.aberta) {
+  if (chaveAberta && chaveAberta !== v.aberta && config.load().avisarEntrada) {
     const a = state.aberta;
     vigia.add(
       "entrada",
@@ -2039,7 +2039,7 @@ function vigiar() {
 
   // uma operação terminou
   const chaveUltima = state.ultima ? `${state.ultima.abertura}:${state.ultima.resultado}` : null;
-  if (chaveUltima && chaveUltima !== v.ultima) {
+  if (chaveUltima && chaveUltima !== v.ultima && config.load().avisarResultado) {
     const u = state.ultima;
     const ok = u.resultado === "alvo";
     vigia.add(
@@ -2251,7 +2251,7 @@ function pintarDica() {
   if (!caixa || !corpo) return;
 
   const scan = state.scan;
-  if (!scan) {
+  if (!scan || !config.load().mostrarDica) {
     caixa.hidden = true;
     return;
   }
@@ -2393,11 +2393,289 @@ function ligarMascote() {
   });
 }
 
+// ---------------------------------------------------------------- conta
+/**
+ * Preferences, kept in this browser.
+ *
+ * No account exists yet, so everything here belongs to the device. The shape
+ * is deliberately flat and small: when a real login arrives, this same object
+ * is what gets synced, and nothing above it has to change.
+ */
+const config = {
+  chave: "painel:config",
+
+  padrao: {
+    nome: "",
+    foto: "",
+    ativo: "BTC",
+    tempo: "5m",
+    avisarEntrada: true,
+    avisarResultado: true,
+    mostrarMascote: true,
+    mostrarDica: true,
+    cards: { pos: true, perfil: true, bt: true, baleia: true, placar: true, sessao: true },
+  },
+
+  atual: null,
+
+  load() {
+    if (config.atual) return config.atual;
+    try {
+      const salvo = JSON.parse(localStorage.getItem(config.chave) || "{}");
+      config.atual = {
+        ...config.padrao,
+        ...salvo,
+        cards: { ...config.padrao.cards, ...(salvo.cards || {}) },
+      };
+    } catch {
+      config.atual = { ...config.padrao, cards: { ...config.padrao.cards } };
+    }
+    return config.atual;
+  },
+
+  save(novo) {
+    config.atual = { ...config.load(), ...novo };
+    try {
+      localStorage.setItem(config.chave, JSON.stringify(config.atual));
+    } catch {
+      /* a photo too large for the quota simply is not kept */
+    }
+    return config.atual;
+  },
+};
+
+/** Initials, for when there is no picture yet. */
+function iniciais(nome) {
+  const partes = (nome || "").trim().split(/\s+/).filter(Boolean);
+  if (!partes.length) return "?";
+  return (partes[0][0] + (partes.length > 1 ? partes[partes.length - 1][0] : "")).toUpperCase();
+}
+
+function pintarConta() {
+  const c = config.load();
+  const foto = el("contaFoto");
+  const letra = el("contaLetra");
+  const nome = el("contaNome");
+  if (!foto) return;
+
+  if (c.foto) {
+    foto.src = c.foto;
+    foto.hidden = false;
+    letra.hidden = true;
+  } else {
+    foto.hidden = true;
+    letra.hidden = false;
+    letra.textContent = iniciais(c.nome);
+  }
+
+  nome.textContent = c.nome || "Entrar";
+}
+
+/** Applies what the panel can change without reloading. */
+function aplicarConfig() {
+  const c = config.load();
+
+  const mostra = (id, ligado) => {
+    const n = el(id);
+    if (n) n.hidden = !ligado;
+  };
+
+  mostra("cardPos", c.cards.pos);
+  mostra("cardPerfil", c.cards.perfil);
+  mostra("cardBt", c.cards.bt);
+  mostra("cardBaleia", c.cards.baleia);
+  mostra("cardPlacar", c.cards.placar);
+  mostra("cardSessao", c.cards.sessao);
+
+  mostra("mascote", c.mostrarMascote);
+  if (!c.mostrarMascote) el("balao").hidden = true;
+  if (!c.mostrarDica) el("dica").hidden = true;
+
+  pintarConta();
+}
+
+/** Shrinks the picture before it is stored: a full photo would not fit. */
+function lerFoto(arquivo) {
+  return new Promise((ok, falha) => {
+    const leitor = new FileReader();
+    leitor.onerror = () => falha(new Error("não consegui ler o arquivo"));
+    leitor.onload = () => {
+      const img = new Image();
+      img.onerror = () => falha(new Error("arquivo não é uma imagem"));
+      img.onload = () => {
+        const lado = 160;
+        const tela = document.createElement("canvas");
+        tela.width = lado;
+        tela.height = lado;
+        const ctx = tela.getContext("2d");
+
+        // cover: crop the long side instead of squashing the face
+        const escala = Math.max(lado / img.width, lado / img.height);
+        const w = img.width * escala;
+        const h = img.height * escala;
+        ctx.drawImage(img, (lado - w) / 2, (lado - h) / 2, w, h);
+
+        ok(tela.toDataURL("image/jpeg", 0.82));
+      };
+      img.src = leitor.result;
+    };
+    leitor.readAsDataURL(arquivo);
+  });
+}
+
+function abrirConfig() {
+  const c = config.load();
+
+  el("cfgNome").value = c.nome;
+  el("cfgPadrao").textContent = `${state.symbol.replace(/^f:/, "")} · ${state.timeframe}`;
+  el("cfgAtualSalvo").textContent = `${c.ativo.replace(/^f:/, "")} · ${c.tempo}`;
+
+  const marcar = (id, v) => (el(id).checked = v);
+  marcar("cfgEntrada", c.avisarEntrada);
+  marcar("cfgResultado", c.avisarResultado);
+  marcar("cfgMascote", c.mostrarMascote);
+  marcar("cfgDica", c.mostrarDica);
+  marcar("cfgCardPos", c.cards.pos);
+  marcar("cfgCardPerfil", c.cards.perfil);
+  marcar("cfgCardBt", c.cards.bt);
+  marcar("cfgCardBaleia", c.cards.baleia);
+  marcar("cfgCardPlacar", c.cards.placar);
+  marcar("cfgCardSessao", c.cards.sessao);
+
+  const previa = el("cfgFoto");
+  previa.style.backgroundImage = c.foto ? `url(${c.foto})` : "none";
+  previa.textContent = c.foto ? "" : iniciais(c.nome);
+
+  el("config").hidden = false;
+}
+
+function salvarConfig() {
+  config.save({
+    nome: el("cfgNome").value.trim().slice(0, 40),
+    avisarEntrada: el("cfgEntrada").checked,
+    avisarResultado: el("cfgResultado").checked,
+    mostrarMascote: el("cfgMascote").checked,
+    mostrarDica: el("cfgDica").checked,
+    cards: {
+      pos: el("cfgCardPos").checked,
+      perfil: el("cfgCardPerfil").checked,
+      bt: el("cfgCardBt").checked,
+      baleia: el("cfgCardBaleia").checked,
+      placar: el("cfgCardPlacar").checked,
+      sessao: el("cfgCardSessao").checked,
+    },
+  });
+
+  aplicarConfig();
+  el("config").hidden = true;
+}
+
+/** The trade log, as a file a spreadsheet can open. */
+function exportarHistorico() {
+  const lista = historico.load();
+  if (!lista.length) return;
+
+  const linhas = [
+    "abertura;fechamento;ativo;tempo;lado;entrada;stop;alvo;rr;resultado;r;placar",
+    ...lista.map((t) => {
+      const r = t.resultado === "alvo" ? t.rr : -1;
+      return [
+        new Date(t.abertura).toLocaleString("pt-BR"),
+        t.fechamento ? new Date(t.fechamento).toLocaleString("pt-BR") : "",
+        t.symbol.replace(/^f:/, ""),
+        t.timeframe,
+        t.side,
+        t.entrada,
+        t.stop,
+        t.alvo,
+        t.rr?.toFixed(2) ?? "",
+        t.resultado,
+        r.toFixed(2),
+        t.contexto?.score ?? "",
+      ].join(";");
+    }),
+  ];
+
+  const blob = new Blob(["\ufeff" + linhas.join("\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `operacoes-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+function ligarConta() {
+  el("conta")?.addEventListener("click", abrirConfig);
+  el("cfgFechar")?.addEventListener("click", () => (el("config").hidden = true));
+  el("cfgCancelar")?.addEventListener("click", () => (el("config").hidden = true));
+  el("cfgSalvar")?.addEventListener("click", salvarConfig);
+  el("cfgExportar")?.addEventListener("click", exportarHistorico);
+
+  el("config")?.addEventListener("click", (e) => {
+    if (e.target.id === "config") el("config").hidden = true;
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") el("config").hidden = true;
+  });
+
+  el("cfgArquivo")?.addEventListener("change", async (e) => {
+    const arquivo = e.target.files?.[0];
+    if (!arquivo) return;
+    try {
+      const foto = await lerFoto(arquivo);
+      config.save({ foto });
+      const previa = el("cfgFoto");
+      previa.style.backgroundImage = `url(${foto})`;
+      previa.textContent = "";
+      pintarConta();
+    } catch (err) {
+      el("cfgAviso").textContent = err.message;
+    }
+    e.target.value = "";
+  });
+
+  el("cfgTirarFoto")?.addEventListener("click", () => {
+    config.save({ foto: "" });
+    const previa = el("cfgFoto");
+    previa.style.backgroundImage = "none";
+    previa.textContent = iniciais(config.load().nome);
+    pintarConta();
+  });
+
+  el("cfgUsarAtual")?.addEventListener("click", () => {
+    config.save({ ativo: state.symbol, tempo: state.timeframe });
+    el("cfgAtualSalvo").textContent = `${state.symbol.replace(/^f:/, "")} · ${state.timeframe}`;
+  });
+
+  el("cfgLimpar")?.addEventListener("click", () => {
+    if (el("cfgLimpar").dataset.certeza !== "sim") {
+      el("cfgLimpar").dataset.certeza = "sim";
+      el("cfgLimpar").textContent = "tem certeza? apagar tudo";
+      return;
+    }
+    try {
+      localStorage.removeItem(historico.chave);
+    } catch {
+      /* nada a fazer */
+    }
+    el("cfgLimpar").dataset.certeza = "";
+    el("cfgLimpar").textContent = "apagar histórico";
+    el("cfgAviso").textContent = "histórico apagado.";
+  });
+}
+
 // ---------------------------------------------------------------- start
+const cfgInicial = config.load();
+state.symbol = cfgInicial.ativo;
+state.timeframe = cfgInicial.tempo;
+
 mount();
 mountDeep();
 ligarMascote();
+ligarConta();
 buildControls();
+aplicarConfig();
 status("", "conectando…");
 start();
 rodarBacktest();
