@@ -65,7 +65,7 @@ export const CATEGORIES = [
 
   // gold that actually trades on the exchange: each token is backed by an ounce
   // and tracks XAU/USD, which is the closest thing to XAUUSD available here
-  { id: "ouro", classe: "Commodities", label: "Ouro", assets: ["PAXG", "XAUT"] },
+  { id: "ouro", classe: "Commodities", label: "Ouro", assets: ["XAU", "PAXG", "XAUT"] },
 
   { id: "cambio", classe: "Câmbio", label: "Moedas", assets: ["EUR", "GBP", "AUD", "JPY", "TRY"] },
 ];
@@ -225,12 +225,147 @@ const kraken = {
   },
 };
 
+/**
+ * Yahoo publishes candles but sends no CORS header, so a page cannot read it
+ * directly. These public relays fetch it server side and add the header. They
+ * are free and occasionally flaky, hence more than one.
+ */
+const RELAYS = [
+  {
+    // returns the page as text behind a short preamble, so the JSON starts at
+    // the first brace
+    url: (u) => `https://r.jina.ai/${u}`,
+    read: (txt) => JSON.parse(txt.slice(txt.indexOf('{"'))),
+  },
+  {
+    url: (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+    read: JSON.parse,
+  },
+  {
+    url: (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+    read: JSON.parse,
+  },
+];
+
+async function relayed(url) {
+  let erro = new Error("nenhum repassador respondeu");
+
+  for (const relay of RELAYS) {
+    try {
+      const res = await fetch(relay.url(url));
+      if (!res.ok) throw new Error(String(res.status));
+      return relay.read(await res.text());
+    } catch (e) {
+      erro = e;
+    }
+  }
+
+  throw erro;
+}
+
+// Yahoo has no 4h bar, so it is folded from hourly ones
+const YF = {
+  "1m": { interval: "1m", range: "1d" },
+  "5m": { interval: "5m", range: "5d" },
+  "15m": { interval: "15m", range: "5d" },
+  "1h": { interval: "60m", range: "1mo" },
+  "4h": { interval: "60m", range: "3mo", fold: 4 },
+  "1d": { interval: "1d", range: "1y" },
+};
+
+function fold(candles, n) {
+  const out = [];
+  for (let i = 0; i < candles.length; i += n) {
+    const bloco = candles.slice(i, i + n);
+    if (!bloco.length) continue;
+    out.push({
+      time: bloco[0].time,
+      open: bloco[0].open,
+      high: Math.max(...bloco.map((c) => c.high)),
+      low: Math.min(...bloco.map((c) => c.low)),
+      close: bloco[bloco.length - 1].close,
+      volume: bloco.reduce((a, c) => a + c.volume, 0),
+    });
+  }
+  return out;
+}
+
+async function yahooChart(sym, tf) {
+  const cfg = YF[tf] || YF["1h"];
+  const d = await relayed(
+    `https://query1.finance.yahoo.com/v8/finance/chart/${sym}` +
+      `?interval=${cfg.interval}&range=${cfg.range}`
+  );
+
+  const r = d?.chart?.result?.[0];
+  if (!r) throw new Error(d?.chart?.error?.description || "sem dados");
+
+  const q = r.indicators.quote[0];
+  let candles = r.timestamp
+    .map((t, i) => ({
+      time: t * 1000,
+      open: q.open[i],
+      high: q.high[i],
+      low: q.low[i],
+      close: q.close[i],
+      volume: q.volume[i] || 0,
+    }))
+    // Yahoo pads gaps with nulls; a null candle is a hole, not a price
+    .filter((c) => c.open != null && c.close != null && c.high != null && c.low != null);
+
+  if (cfg.fold) candles = fold(candles, cfg.fold);
+  return { candles: candles.slice(-300), meta: r.meta };
+}
+
+const yahoo = {
+  name: "Yahoo",
+  key: "yahoo",
+
+  async candles(sym, tf) {
+    return (await yahooChart(sym, tf)).candles;
+  },
+
+  async stats(sym) {
+    const { meta } = await yahooChart(sym, "1h");
+    const last = meta.regularMarketPrice;
+    // previousClose is the prior session; chartPreviousClose is whatever sat
+    // before the requested range, which on a month of bars is a month-old price
+    const prev = meta.previousClose || meta.chartPreviousClose || last;
+    return { price: last, changePct: prev ? ((last - prev) / prev) * 100 : 0 };
+  },
+
+  // a futures quote page gives neither the tape nor the book
+  async trades() {
+    return [];
+  },
+  async book() {
+    return null;
+  },
+};
+
 const PROVIDERS = [binance, coinbase, kraken];
 
 /** The provider currently answering; stays chosen until it fails. */
 let active = null;
 
-const ASSETS = new Map(SYMBOLS.map((s) => [s.id, s]));
+/**
+ * Assets that do not live on a crypto exchange.
+ *
+ * There is no spot XAUUSD feed a browser can reach for free, so gold here is
+ * the COMEX front-month future — real OHLC, trading a carry premium above
+ * spot. The header shows the spot price beside it, so the gap is on screen
+ * rather than hidden behind a familiar ticker.
+ */
+const EXTRAS = [
+  { id: "XAU", label: "XAU futuro", source: "yahoo", yahoo: "GC=F" },
+];
+
+const ASSETS = new Map([...SYMBOLS, ...EXTRAS].map((s) => [s.id, s]));
+
+/** Which feed serves an asset: "yahoo" for the extras, exchanges otherwise. */
+export function assetSource(id) {
+  return ASSETS.get(id)?.source || "exchange";
+}
 
 function symbolFor(provider, id) {
   return ASSETS.get(id)?.[provider.key];
@@ -271,9 +406,9 @@ export function universe() {
       }
 
       out.sort((a, b) => a.id.localeCompare(b.id));
-      return out;
+      return [...EXTRAS, ...out];
     })
-    .catch(() => SYMBOLS); // the six majors still work if the listing fails
+    .catch(() => [...EXTRAS, ...SYMBOLS]); // the majors still work if the listing fails
 
   return listing;
 }
@@ -283,7 +418,12 @@ export function universe() {
  * source served it, so the panel can name the data it is showing.
  */
 export async function snapshot(symbolId, timeframe) {
-  const ordered = active ? [active, ...PROVIDERS.filter((p) => p !== active)] : PROVIDERS;
+  const ordered =
+    assetSource(symbolId) === "yahoo"
+      ? [yahoo]
+      : active
+        ? [active, ...PROVIDERS.filter((p) => p !== active)]
+        : PROVIDERS;
   const failures = [];
 
   for (const provider of ordered) {
@@ -432,6 +572,8 @@ const SOCKETS = {
  * to keep polling harder when it does not.
  */
 export function stream(symbolId, timeframe, on) {
+  if (assetSource(symbolId) === "yahoo") return { live: false, close() {} };
+
   const provider = active || PROVIDERS[0];
   const open = SOCKETS[provider.key];
   const sym = symbolFor(provider, symbolId);

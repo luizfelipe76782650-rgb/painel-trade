@@ -8,6 +8,7 @@ import {
 } from "./analysis.js";
 import {
   CATEGORIES,
+  assetSource,
   SYMBOLS,
   TF_SECONDS,
   TIMEFRAMES,
@@ -23,6 +24,7 @@ const el = (id) => document.getElementById(id);
 
 const POLL_STREAM = 20000; // socket alive: REST only corrects drift
 const POLL_REST = 3000; // no socket: REST is the only source
+const POLL_RELAY = 15000; // a public relay is not worth hammering
 const ANALYSIS_MS = 1200; // zones and score settle instead of flickering
 const PAINT_MS = 40; // 25 redraws a second
 
@@ -51,7 +53,7 @@ const TRADE_WINDOW = 600;
 const FLOW_BARS = { "1m": 20, "5m": 18, "15m": 16, "1h": 12, "4h": 12, "1d": 10 };
 
 /** Gold tokens, shown against the real spot price rather than on their own. */
-const OURO = new Set(["PAXG", "XAUT"]);
+const OURO = new Set(["XAU", "PAXG", "XAUT"]);
 
 const state = {
   symbol: "BTC",
@@ -572,7 +574,12 @@ function start() {
   openSocket();
   pull();
   pullSpot();
-  poller = setInterval(pull, socket.live ? POLL_STREAM : POLL_REST);
+  const ritmo = socket.live
+    ? POLL_STREAM
+    : assetSource(state.symbol) === "yahoo"
+      ? POLL_RELAY
+      : POLL_REST;
+  poller = setInterval(pull, ritmo);
 }
 
 function stop() {
@@ -783,7 +790,11 @@ function paintBars() {
   R.aSell.style.height = `${Math.round((shown.sell / total) * 64)}px`;
   R.aBuyV.textContent = short(shown.buy);
   R.aSellV.textContent = short(shown.sell);
-  R.aggWin.textContent = state.flowBars ? `${state.flowBars}× ${state.timeframe}` : "tape";
+  R.aggWin.textContent = state.flowBars
+    ? `${state.flowBars}× ${state.timeframe}`
+    : total > 1
+      ? "tape"
+      : "sem fluxo";
 
   const d = shown.buy - shown.sell;
   R.deltaV.textContent = `delta ${d >= 0 ? "+" : "−"}${short(Math.abs(d))}`;
