@@ -21,7 +21,7 @@
     <link rel="apple-touch-icon" href="./icone.svg" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <link rel="stylesheet" href="./style.css?v=24" />
+    <link rel="stylesheet" href="./style.css?v=34" />
   </head>
   <body>
     <div class="app">
@@ -105,6 +105,13 @@
       <section class="deep" id="deep"></section>
     </div>
 
+    <button class="aba-btn" id="abaBtn" type="button" aria-label="Voltar ao início">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/>
+      </svg>
+    </button>
+
     <button class="mascote" id="mascote" type="button" aria-label="Leitura do mercado">
       <span class="mascote-corpo">
         <img src="./mascote.png" alt="" id="mascoteImg" />
@@ -171,6 +178,20 @@
           </section>
 
           <section class="cfg-bloco">
+            <span class="cfg-rotulo">COMO O PAINEL LÊ O GRÁFICO</span>
+            <label class="cfg-opcao"><input type="checkbox" id="cfgVender" />
+              <span>Operar também na venda</span></label>
+            <p class="cfg-nota">Desligado por padrão. Medida em 18 ativos com taxa, a venda
+              perdeu nos três cenários — mercado subindo (−0,372R), de lado (−0,123R) e
+              caindo (−0,103R). Só a compra rende +0,302R por operação.</p>
+            <label class="cfg-opcao"><input type="checkbox" id="cfgComite" />
+              <span>Modo comitê — cinco leitores, só vota quem já provou neste ativo</span></label>
+            <p class="cfg-nota">Desligado, o painel usa a leitura padrão de zonas, que rendeu
+              mais nos testes. Ligado, cada ativo é operado só pelos leitores que foram
+              positivos nas duas metades do próprio histórico.</p>
+          </section>
+
+          <section class="cfg-bloco">
             <span class="cfg-rotulo">BLOCOS DO DETALHE</span>
             <label class="cfg-opcao"><input type="checkbox" id="cfgCardPos" />
               <span>Fluxo e posicionamento</span></label>
@@ -180,6 +201,10 @@
               <span>Medição da estratégia</span></label>
             <label class="cfg-opcao"><input type="checkbox" id="cfgCardFicha" />
               <span>Ficha do ativo</span></label>
+            <label class="cfg-opcao"><input type="checkbox" id="cfgCardMapa" />
+              <span>Mapa do ativo</span></label>
+            <label class="cfg-opcao"><input type="checkbox" id="cfgCardComite" />
+              <span>Comitê de leitores</span></label>
             <label class="cfg-opcao"><input type="checkbox" id="cfgCardLab" />
               <span>Laboratório de ideias</span></label>
             <label class="cfg-opcao"><input type="checkbox" id="cfgCardRank" />
@@ -234,6 +259,23 @@
       <button class="dica-corpo" id="dicaCorpo" type="button"></button>
     </div>
 
+    <section class="aba" id="aba" hidden aria-label="Início">
+      <header class="aba-topo">
+        <div class="inicio-perfil" id="inicioPerfil"></div>
+        <div class="inicio-saudacao">
+          <span class="inicio-ola" id="inicioOla">Bom te ver</span>
+          <span class="inicio-sub" id="inicioSub">—</span>
+        </div>
+        <button class="aba-voltar" id="abaVoltar" type="button" aria-label="Fechar o início">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 6 6 18M6 6l12 12"/>
+          </svg>
+        </button>
+      </header>
+      <div class="aba-corpo" id="abaCorpo"></div>
+    </section>
+
     <div class="balao" id="balao" hidden>
       <div class="balao-topo">
         <span class="lbl">LEITURA</span>
@@ -244,6 +286,6 @@
       <div class="balao-lista" id="balaoLista"></div>
     </div>
 
-    <script type="module" src="./app.js?v=24"></script>
+    <script type="module" src="./app.js?v=34"></script>
   </body>
 </html>

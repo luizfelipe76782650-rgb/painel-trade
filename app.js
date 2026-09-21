@@ -4,15 +4,18 @@ import {
   analyse,
   backtest,
   deltaFromTrades,
+  OPERA,
+  fichaComite,
   flowFromCandles,
   pivots,
+  planoComite,
   sma,
   cvdSeries,
   testarFamilia,
   varrer,
   volumeProfile,
   zoneStats,
-} from "./analysis.js?v=24";
+} from "./analysis.js?v=34";
 import {
   CATEGORIES,
   JANELA,
@@ -27,7 +30,7 @@ import {
   spotGold,
   tape,
   universe,
-} from "./feed.js?v=24";
+} from "./feed.js?v=34";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const el = (id) => document.getElementById(id);
@@ -98,6 +101,12 @@ const state = {
   ficha: null,
   fichando: false,
   fichaPasso: null,
+  mapa: null,
+  mapeando: false,
+  mapaPasso: null,
+  comite: null,
+  comiteRodando: false,
+  comiteChave: null,
   lab: null,
   labRodando: false,
   familia: "zonas",
@@ -499,6 +508,12 @@ function reload() {
   renderRanking();
   state.lab = null;
   renderLab();
+  state.comite = null;
+  renderComite();
+  medirComite();
+  state.mapa = null;
+  renderMapa();
+  mapear();
 }
 
 /** Refills the asset picker for the chosen group, from the live listing. */
@@ -800,6 +815,21 @@ function recompute() {
     flow: { ...flow, total: flow.buy + flow.sell },
   });
 
+  /**
+   * In committee mode the plan comes from whichever seated reader speaks,
+   * instead of from the single combined score. Everything downstream — the
+   * chart lines, the trailing stop, the watcher — is untouched, because the
+   * plan keeps its shape.
+   */
+  if (config.load().comite) {
+    const assentos = (state.comite?.leitores || []).filter((l) => l.assento).map((l) => l.chave);
+    state.analysis.plan = planoComite(candles, state.analysis.atr, assentos, {
+      flowBars: FLOW_BARS[state.timeframe] || 12,
+      depth: state.depth,
+      zoneLimit: state.zones,
+    });
+  }
+
   // an entry waits for the bar to close: a signal that only existed mid-bar
   // was never confirmed by the market
   const openTime = candles[candles.length - 1].time;
@@ -984,7 +1014,7 @@ function planBody(aberta, plano) {
           <div class="v">${fmt(aberta.entrada)}</div></div>
         <div class="tile"><div class="t" style="color:var(--down-soft)">STOP</div>
           <div class="v">${fmt(aberta.stop)}</div></div>
-        <div class="tile"><div class="t" style="color:${WARN}">REFERÊNCIA</div>
+        <div class="tile"><div class="t" style="color:${WARN}">ALVO</div>
           <div class="v">${fmt(aberta.alvo)}</div></div>
       </div>
       <div class="nota">Sem alvo fixo: a operação sai quando o stop móvel for atingido.
@@ -1019,6 +1049,19 @@ function planBody(aberta, plano) {
       <div class="plan-out">Última: ${state.ultima.side} em ${fmt(
         state.ultima.entrada
       )}.<br>Aguardando nova entrada.</div>`;
+  }
+
+  /**
+   * A reading the panel found and then refused, which is worth distinguishing
+   * from having found nothing at all.
+   */
+  if (plano?.barrado) {
+    return `<div class="plan-barrado">
+        <div class="plan-wait-head" style="color:${DOWN}">LEITURA DE VENDA</div>
+        <div class="muted">O painel opera só a compra. Medida em 18 ativos, a venda
+          perdeu em alta, de lado e em queda — e afrouxar o stop dela não resolveu.
+          Dá pra ligar em Configurações.</div>
+      </div>`;
   }
 
   return `<div class="plan-out"><b>Sem operação.</b><br>${
@@ -1397,7 +1440,7 @@ function drawPills(result, aberta, y, g) {
 
   if (aberta) {
     const col = aberta.side === "compra" ? UP : DOWN;
-    pill("right", y(aberta.alvo), WARN, `REF ${val(aberta.alvo)}`);
+    pill("right", y(aberta.alvo), WARN, `ALVO ${val(aberta.alvo)}`);
     pill("right", y(aberta.entrada), col, `${aberta.side.toUpperCase()} ${val(aberta.entrada)}`);
     pill(
       "right",
@@ -1500,6 +1543,22 @@ function mountDeep() {
         <div id="fichaBody" class="deep-body"></div>
       </div>
 
+      <div class="card deep-card" id="cardMapa">
+        <div class="plan-head">
+          <span class="lbl">MAPA DO ATIVO</span>
+          <span class="muted" id="mapaInfo">—</span>
+        </div>
+        <div id="mapaBody" class="deep-body"></div>
+      </div>
+
+      <div class="card deep-card" id="cardComite">
+        <div class="plan-head">
+          <span class="lbl">COMITÊ DE LEITORES</span>
+          <span class="muted" id="comiteInfo">—</span>
+        </div>
+        <div id="comiteBody" class="deep-body"></div>
+      </div>
+
       <div class="card deep-card" id="cardLab">
         <div class="plan-head">
           <span class="lbl">LABORATÓRIO DE IDEIAS</span>
@@ -1534,7 +1593,7 @@ function mountDeep() {
     </div>`;
 
   ["posSym", "posBody", "perfilInfo", "perfilBody", "placarInfo", "placarBody",
-   "sessaoInfo", "sessaoBody", "btInfo", "btBody", "baleiaInfo", "baleiaBody", "fichaInfo", "fichaBody", "rankInfo", "rankBody", "labInfo", "labBody"].forEach((id) => (R[id] = el(id)));
+   "sessaoInfo", "sessaoBody", "btInfo", "btBody", "baleiaInfo", "baleiaBody", "fichaInfo", "fichaBody", "rankInfo", "rankBody", "labInfo", "labBody", "comiteInfo", "comiteBody", "mapaInfo", "mapaBody"].forEach((id) => (R[id] = el(id)));
 }
 
 /** A line chart small enough to read as a shape rather than a chart. */
@@ -2613,8 +2672,10 @@ const config = {
     mostrarMascote: true,
     mostrarDica: true,
     som: true,
+    comite: false,
+    venderTambem: false,
     taxa: 0.0002,
-    cards: { pos: true, perfil: true, bt: true, ficha: true, lab: true, rank: true, baleia: true, placar: true, sessao: true },
+    cards: { pos: true, perfil: true, bt: true, mapa: true, ficha: true, comite: true, lab: true, rank: true, baleia: true, placar: true, sessao: true },
   },
 
   atual: null,
@@ -2686,6 +2747,10 @@ function aplicarConfig() {
   mostra("cardBt", c.cards.bt);
   mostra("cardFicha", c.cards.ficha !== false);
   mostra("cardRank", c.cards.rank !== false);
+  OPERA.venda = c.venderTambem === true;
+
+  mostra("cardMapa", c.cards.mapa !== false);
+  mostra("cardComite", c.cards.comite !== false);
   mostra("cardLab", c.cards.lab !== false);
   mostra("cardBaleia", c.cards.baleia);
   mostra("cardPlacar", c.cards.placar);
@@ -2747,6 +2812,10 @@ function abrirConfig() {
   marcar("cfgCardBt", c.cards.bt);
   marcar("cfgCardFicha", c.cards.ficha !== false);
   marcar("cfgCardRank", c.cards.rank !== false);
+  marcar("cfgVender", c.venderTambem === true);
+  marcar("cfgComite", c.comite === true);
+  marcar("cfgCardMapa", c.cards.mapa !== false);
+  marcar("cfgCardComite", c.cards.comite !== false);
   marcar("cfgCardLab", c.cards.lab !== false);
   marcar("cfgCardBaleia", c.cards.baleia);
   marcar("cfgCardPlacar", c.cards.placar);
@@ -2767,6 +2836,8 @@ function salvarConfig() {
     mostrarMascote: el("cfgMascote").checked,
     mostrarDica: el("cfgDica").checked,
     som: el("cfgSom").checked,
+    venderTambem: el("cfgVender").checked,
+    comite: el("cfgComite").checked,
     taxa: parseFloat(el("cfgTaxa").value),
     cards: {
       pos: el("cfgCardPos").checked,
@@ -2774,6 +2845,8 @@ function salvarConfig() {
       bt: el("cfgCardBt").checked,
       ficha: el("cfgCardFicha").checked,
       rank: el("cfgCardRank").checked,
+      mapa: el("cfgCardMapa").checked,
+      comite: el("cfgCardComite").checked,
       lab: el("cfgCardLab").checked,
       baleia: el("cfgCardBaleia").checked,
       placar: el("cfgCardPlacar").checked,
@@ -3579,7 +3652,10 @@ mountDeep();
 renderFicha();
 renderRanking();
 renderLab();
+renderComite();
+renderMapa();
 ligarMascote();
+ligarAba();
 ligarConta();
 buildControls();
 aplicarConfig();
@@ -3588,8 +3664,502 @@ start();
 rodarBacktest();
 pullTape();
 setTimeout(escanear, 3000);
+setTimeout(medirComite, 5000);
+setTimeout(mapear, 9000);
 setInterval(pullTape, 20000);
 setInterval(pullSpot, 30000);
 setInterval(pullDeep, DEEP_MS);
 setInterval(escanear, SCAN_MS);
 requestAnimationFrame(loop);
+
+// ------------------------------------------------------------- comitê (tela)
+/**
+ * Measures every reader on the asset on screen and shows who earned a seat.
+ *
+ * The two halves are both reported, because the seat rule is exactly "positive
+ * in both" — showing only the total would hide the thing the rule is made of.
+ */
+async function medirComite() {
+  if (state.comiteRodando) return;
+  const chave = `${state.symbol}:${state.timeframe}`;
+  state.comiteRodando = true;
+  state.comite = null;
+  renderComite();
+
+  try {
+    const velas = await history(state.symbol, state.timeframe, 3000);
+    if (chave !== `${state.symbol}:${state.timeframe}`) return;
+
+    const ficha = fichaComite(velas || [], {
+      janela: JANELA,
+      taxa: taxaAtual(),
+      flowBars: FLOW_BARS[state.timeframe] || 12,
+      depth: state.depth,
+      zoneLimit: state.zones,
+    });
+    await respirar();
+
+    state.comite = ficha.curto
+      ? { erro: "Histórico curto demais para dar assento a alguém." }
+      : { ...ficha, symbol: state.symbol, timeframe: state.timeframe };
+    state.comiteChave = chave;
+  } catch (err) {
+    state.comite = { erro: err.message };
+  } finally {
+    state.comiteRodando = false;
+    renderComite();
+    if (state.data?.candles?.length) recompute();
+  }
+}
+
+function renderComite() {
+  if (!R.comiteBody) return;
+  const ligado = config.load().comite === true;
+  const c = state.comite;
+
+  R.comiteInfo.textContent = state.comiteRodando
+    ? "medindo…"
+    : `${state.symbol.replace(/^f:/, "")} · ${state.timeframe}`;
+
+  const chave = `<label class="cfg-opcao comite-chave">
+      <input type="checkbox" id="comiteLiga"${ligado ? " checked" : ""} />
+      <span>Usar o comitê no lugar da leitura padrão</span>
+    </label>`;
+
+  let corpo;
+  if (c?.erro) {
+    corpo = `<div class="vazio">${esc(c.erro)}</div>`;
+  } else if (!c) {
+    corpo = `<div class="vazio">Medindo cada leitor neste ativo…</div>`;
+  } else {
+    const num = (v) => (v == null ? "—" : `${v >= 0 ? "+" : ""}${v.toFixed(3)}R`);
+    const cor = (v) => (v == null ? NEU : v > 0 ? UP : v < 0 ? DOWN : NEU);
+
+    const linhas = c.leitores
+      .map(
+        (l) => `<div class="comite-linha ${l.assento ? "tem-assento" : ""}">
+          <div class="comite-nome">
+            <span class="comite-selo">${l.assento ? "ASSENTO" : "SEM VOTO"}</span>
+            <strong>${esc(l.nome)}</strong>
+            <span class="nota">${esc(l.conta)}</span>
+          </div>
+          <div class="comite-nums">
+            <span class="m-sub">1ª</span><span style="color:${cor(l.primeira)}">${num(l.primeira)}</span>
+            <span class="m-sub">2ª</span><span style="color:${cor(l.segunda)}">${num(l.segunda)}</span>
+            <span class="m-sub">${l.ops} op</span>
+          </div>
+        </div>`
+      )
+      .join("");
+
+    corpo = `<div class="comite-lista">${linhas}</div>
+      <div class="veredito ${c.assentos ? "bom" : "ruim"}">
+        ${c.assentos ? `${c.assentos} DE ${c.leitores.length} COM ASSENTO` : "NINGUÉM COM ASSENTO AQUI"}
+      </div>
+      <div class="nota">Um leitor só vota neste ativo se foi positivo nas <strong>duas</strong>
+        metades do histórico, com ao menos 12 operações. Medido em 20 ativos no 1h, o comitê
+        rendeu +0,086R por operação contra +0,270R da leitura padrão — por isso ele vem
+        desligado. Ligue para comparar no ativo que você opera.</div>`;
+  }
+
+  swap(R.comiteBody, "comite", chave + corpo);
+
+  el("comiteLiga")?.addEventListener("change", (e) => {
+    config.save({ comite: e.target.checked });
+    renderComite();
+    if (state.data?.candles?.length) recompute();
+  });
+}
+
+// ------------------------------------------------------------ mapa do ativo
+const TEMPOS_MAPA = ["5m", "15m", "1h", "4h", "1d"];
+
+/**
+ * The same asset measured across every timeframe, side by side.
+ *
+ * The panel treats 5m and 1h with the same confidence, but they are not the
+ * same trade: gold measured -0.140R an hour candle on 5m and +0.242R on 1h over
+ * the same history, because a fee is a fixed share of a tight stop and a small
+ * share of a wide one. That difference decides whether the panel makes money
+ * for its owner, and until now it was only visible to whoever ran a backtest.
+ */
+async function mapear() {
+  if (state.mapeando) return;
+  const chave = state.symbol;
+  state.mapeando = true;
+  state.mapa = null;
+  renderMapa();
+
+  const linhas = [];
+  try {
+    for (const tf of TEMPOS_MAPA) {
+      if (chave !== state.symbol) return;
+      state.mapaPasso = `medindo ${tf}`;
+      renderMapa();
+      await respirar();
+
+      try {
+        const velas = await history(state.symbol, tf, 2500);
+        if (!velas || velas.length - JANELA < 300) { linhas.push({ tf, curto: true }); continue; }
+        const bt = backtest(velas, { flowBars: FLOW_BARS[tf] || 12, janela: JANELA, taxa: taxaAtual() });
+        linhas.push(bt && bt.total >= 5
+          ? { tf, ops: bt.total, porOp: bt.porOp, acerto: bt.taxa, folga: bt.taxa - bt.acertoNecessario }
+          : { tf, poucas: true });
+      } catch {
+        linhas.push({ tf, erro: true });
+      }
+    }
+    state.mapa = { symbol: state.symbol, linhas };
+  } finally {
+    state.mapeando = false;
+    state.mapaPasso = null;
+    renderMapa();
+  }
+}
+
+function renderMapa() {
+  if (!R.mapaBody) return;
+  const ativo = state.symbol.replace(/^f:/, "");
+  R.mapaInfo.textContent = state.mapeando ? state.mapaPasso || "medindo…" : ativo;
+
+  if (state.mapeando && !state.mapa) {
+    swap(R.mapaBody, "mapa", `<div class="vazio">${esc(state.mapaPasso || "medindo")}…</div>`);
+    return;
+  }
+  if (!state.mapa) {
+    swap(R.mapaBody, "mapa", `<div class="vazio">Sem medição ainda.</div>
+      <button class="btn largo" id="mapaBotao">medir ${esc(ativo)} nos cinco tempos</button>`);
+    el("mapaBotao")?.addEventListener("click", mapear);
+    return;
+  }
+
+  const { linhas } = state.mapa;
+  const validas = linhas.filter((l) => l.porOp != null);
+  const melhor = validas.length ? validas.reduce((m, l) => (l.porOp > m.porOp ? l : m)) : null;
+  const atual = linhas.find((l) => l.tf === state.timeframe);
+
+  const corpo = linhas.map((l) => {
+    if (l.porOp == null) {
+      const por = l.curto ? "histórico curto" : l.erro ? "falhou" : "poucas operações";
+      return `<div class="mapa-linha vazia"><span class="mapa-tf">${l.tf}</span>
+        <span class="nota">${por}</span></div>`;
+    }
+    const col = l.porOp > 0 ? UP : DOWN;
+    const largura = Math.min(100, Math.abs(l.porOp) * 120);
+    return `<div class="mapa-linha ${l.tf === state.timeframe ? "atual" : ""}">
+        <span class="mapa-tf">${l.tf}${l === melhor ? " ★" : ""}</span>
+        <div class="mapa-barra"><div class="mapa-zero"></div>
+          <div class="mapa-fill" style="${l.porOp > 0 ? "left:50%" : `right:50%`};width:${largura / 2}%;background:${col}"></div></div>
+        <span class="mapa-val" style="color:${col}">${l.porOp >= 0 ? "+" : ""}${l.porOp.toFixed(3)}R</span>
+        <span class="m-sub">${l.ops} op · ${l.acerto.toFixed(0)}%</span>
+      </div>`;
+  }).join("");
+
+  let aviso = "";
+  if (atual?.porOp != null && atual.porOp <= 0) {
+    aviso = `<div class="mapa-aviso">
+        <strong>${esc(ativo)} no ${state.timeframe} rendeu ${atual.porOp.toFixed(3)}R por operação</strong>
+        em ${atual.ops} entradas medidas.${
+          melhor && melhor.porOp > 0
+            ? ` No ${melhor.tf} rendeu ${melhor.porOp >= 0 ? "+" : ""}${melhor.porOp.toFixed(3)}R.`
+            : " Nenhum tempo deste ativo ficou positivo."
+        }</div>`;
+  }
+
+  swap(R.mapaBody, "mapa", aviso + `<div class="mapa-lista">${corpo}</div>
+    <div class="nota">Cada tempo medido no histórico inteiro deste ativo, com a corretagem
+      escolhida e entrada na abertura da barra seguinte ao sinal. ★ é o que mais rendeu.</div>
+    <button class="btn largo" id="mapaBotao">medir de novo</button>`);
+  el("mapaBotao")?.addEventListener("click", mapear);
+}
+
+// ------------------------------------------------------------ tela inicial
+/**
+ * Where the panel opens.
+ *
+ * Until now it opened straight onto the chart, which suits whoever built it and
+ * nobody who just bought it: every measurement the panel makes was reachable
+ * only by scrolling past the part that looks like it is the whole product. This
+ * screen names the paths, and each one lands on the thing it names.
+ *
+ * It covers the panel rather than replacing it, so the stream, the open trade
+ * and the scan all keep running underneath and nothing is rebuilt on the way
+ * back.
+ */
+/**
+ * The paths out of the home screen.
+ *
+ * Each tile carries a `linha` — one concrete fact about what is behind it,
+ * written where it can be changed without touching the layout. A tile that only
+ * names itself makes the reader open it to find out whether it was worth
+ * opening; a tile that says what is inside lets them decide from here.
+ */
+const CAMINHOS = [
+  {
+    id: "operar",
+    titulo: "Operar",
+    conta: "O gráfico ao vivo, com a entrada, o stop e o alvo desenhados na tela.",
+    linha: "Entrada confirmada no fechamento da barra",
+    cor: "#14b8a6",
+    icone: `<path d="M3 17l6-6 4 4 8-8"/><path d="M21 7v6h-6"/>`,
+  },
+  {
+    id: "cardMapa",
+    titulo: "Mapa do ativo",
+    conta: "Em qual tempo gráfico este ativo pagou, e em qual ele custou dinheiro.",
+    linha: "Os cinco tempos medidos lado a lado",
+    cor: "#5c8cff",
+    icone: `<rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/>`,
+  },
+  {
+    id: "cardRank",
+    titulo: "Ranking dos ativos",
+    conta: "Quais ativos o painel lê melhor, medidos um contra o outro.",
+    linha: "Do que mais rende ao que mais custa",
+    cor: "#f5b72a",
+    icone: `<path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3"/><path d="M7 5H4v2a3 3 0 0 0 3 3"/>`,
+  },
+  {
+    id: "cardBt",
+    titulo: "Medição da estratégia",
+    conta: "O que esta leitura teria feito no histórico, com a corretagem descontada.",
+    linha: "Quanto precisa acertar e quanto acerta",
+    cor: "#2fe08a",
+    icone: `<path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/>`,
+  },
+  {
+    id: "cardLab",
+    titulo: "Laboratório de ideias",
+    conta: "Cinco formas de entrar, testadas nas duas metades do histórico separadas.",
+    linha: "Uma ideia que só ganha numa metade não passa",
+    cor: "#b47cf0",
+    icone: `<path d="M9 3h6"/><path d="M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3"/>`,
+  },
+  {
+    id: "conta",
+    titulo: "Minha conta",
+    conta: "Nome, foto, corretagem, voz e quais blocos aparecem na tela.",
+    linha: "A taxa escolhida entra em toda medição",
+    cor: "#8fa39b",
+    icone: `<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>`,
+  },
+  {
+    id: "cardPlacar",
+    titulo: "Placar das operações",
+    conta: "O que o painel chamou desde que você abriu, e como cada uma terminou.",
+    linha: "O seu resultado, não a promessa de ninguém",
+    cor: "#ff7a88",
+    largo: true,
+    icone: `<path d="M3 6h18M3 12h18M3 18h12"/>`,
+  },
+];
+
+function renderInicio() {
+  const corpo = el("abaCorpo");
+  if (!corpo) return;
+  const c = config.load();
+
+  const hora = new Date().getHours();
+  const parte = hora < 5 ? "Boa madrugada" : hora < 12 ? "Bom dia" : hora < 18 ? "Boa tarde" : "Boa noite";
+  const nome = (c.nome || "").trim().split(/\s+/)[0];
+  el("inicioOla").textContent = nome ? `${parte}, ${nome}` : parte;
+  el("inicioSub").textContent = `${state.symbol.replace(/^f:/, "")} · ${state.timeframe}`;
+
+  const foto = el("inicioPerfil");
+  foto.style.backgroundImage = c.foto ? `url(${c.foto})` : "none";
+  foto.textContent = c.foto ? "" : iniciais(c.nome);
+
+  corpo.innerHTML = `<div class="hero" id="hero">
+      <div class="hero-topo">
+        <div class="hero-quem">
+          <span class="hero-ativo" id="heroAtivo">${esc(state.symbol.replace(/^f:/, ""))}</span>
+          <span class="hero-tf">${esc(state.timeframe)}</span>
+        </div>
+        <div class="hero-preco">
+          <span class="hero-valor" id="heroValor">—</span>
+          <span class="hero-var" id="heroVar">—</span>
+        </div>
+      </div>
+      <svg class="hero-svg" id="heroSvg" preserveAspectRatio="none" aria-hidden="true"></svg>
+    </div>
+
+    <div class="inicio-grade">${CAMINHOS.map(
+    (v, i) => `<button class="caminho${v.largo ? " largo" : ""}" type="button"
+        data-vai="${v.id}" style="--cor:${v.cor};--atraso:${i * 60}ms">
+        <span class="caminho-topo">
+          <span class="caminho-icone">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${v.icone}</svg>
+          </span>
+          <span class="caminho-seta">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 18l6-6-6-6"/></svg>
+          </span>
+        </span>
+        <strong class="caminho-titulo">${esc(v.titulo)}</strong>
+        <span class="caminho-conta">${esc(v.conta)}</span>
+        <span class="caminho-linha">${esc(v.linha)}</span>
+      </button>`
+  ).join("")}</div>
+
+  <p class="inicio-rodape">O painel opera só a compra. A venda foi medida em 18 ativos e
+    perdeu com o mercado subindo, de lado e caindo — dá pra ligar em Minha conta.</p>`;
+
+  corpo.querySelectorAll("[data-vai]").forEach((b) =>
+    b.addEventListener("click", () => irPara(b.dataset.vai))
+  );
+
+  desenharHero(true);
+}
+
+/**
+ * The live chart at the top of the home screen.
+ *
+ * It draws itself in when the screen opens — the line sweeps left to right, the
+ * area fills in behind it, and the last point keeps a pulse — then follows the
+ * same candles the panel is already streaming, so it is the real asset rather
+ * than decoration shaped like one. Drawn straight into the SVG in viewport
+ * pixels, measured each pass, so it stays sharp at any width instead of being
+ * a fixed viewBox stretched to fit.
+ */
+function desenharHero(entrando) {
+  const svg = el("heroSvg");
+  const velas = state.data?.candles;
+  if (!svg || !velas?.length) return;
+
+  const caixa = svg.getBoundingClientRect();
+  const L = Math.max(220, Math.round(caixa.width));
+  const A = Math.max(90, Math.round(caixa.height));
+  if (!L || !A) return;
+
+  const dados = velas.slice(-140).map((c) => c.close);
+  if (dados.length < 2) return;
+
+  const alto = Math.max(...dados);
+  const baixo = Math.min(...dados);
+  const faixa = alto - baixo || alto * 0.001 || 1;
+  const topo = 14;
+  const base = A - 10;
+
+  const x = (i) => (i / (dados.length - 1)) * L;
+  const y = (v) => base - ((v - baixo) / faixa) * (base - topo);
+
+  const pontos = dados.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`);
+  const linha = `M${pontos.join(" L")}`;
+  const area = `${linha} L${L},${A} L0,${A} Z`;
+
+  const subiu = dados[dados.length - 1] >= dados[0];
+  const cor = subiu ? "#2fe08a" : "#ff4d63";
+  const fx = x(dados.length - 1);
+  const fy = y(dados[dados.length - 1]);
+
+  svg.setAttribute("viewBox", `0 0 ${L} ${A}`);
+  svg.innerHTML = `
+    <defs>
+      <linearGradient id="heroFill" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="${cor}" stop-opacity="0.34"/>
+        <stop offset="100%" stop-color="${cor}" stop-opacity="0"/>
+      </linearGradient>
+      <filter id="heroGlow" x="-30%" y="-60%" width="160%" height="260%">
+        <feGaussianBlur stdDeviation="3.2" result="b"/>
+        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
+    <path class="hero-area" d="${area}" fill="url(#heroFill)"/>
+    <path class="hero-linha" d="${linha}" fill="none" stroke="${cor}" stroke-width="2"
+      stroke-linecap="round" stroke-linejoin="round" filter="url(#heroGlow)"/>
+    <circle class="hero-halo" cx="${fx.toFixed(1)}" cy="${fy.toFixed(1)}" r="4" fill="${cor}"/>
+    <circle cx="${fx.toFixed(1)}" cy="${fy.toFixed(1)}" r="2.6" fill="${cor}"/>`;
+
+  if (entrando && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    const caminho = svg.querySelector(".hero-linha");
+    const comprimento = caminho.getTotalLength();
+    caminho.style.strokeDasharray = comprimento;
+    caminho.style.strokeDashoffset = comprimento;
+    caminho.getBoundingClientRect(); // força o navegador a assumir o estado inicial
+    caminho.style.transition = "stroke-dashoffset 1.1s cubic-bezier(0.33, 1, 0.68, 1)";
+    caminho.style.strokeDashoffset = "0";
+  }
+
+  const stats = state.data?.stats;
+  const preco = stats?.price || dados[dados.length - 1];
+  el("heroValor").textContent = fmt(preco);
+  const v = stats?.changePct;
+  const alvo = el("heroVar");
+  alvo.textContent = v == null ? "—" : `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`;
+  alvo.style.color = v == null ? NEU : v >= 0 ? UP : DOWN;
+}
+
+/** Closes the home screen and lands on whatever the path named. */
+function irPara(destino) {
+  voz.clique?.();
+  el("aba").hidden = true;
+
+  if (destino === "operar") {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    return;
+  }
+  if (destino === "conta") {
+    abrirConfig();
+    return;
+  }
+
+  const alvo = el(destino);
+  if (!alvo) return;
+
+  // a path that lands on a hidden block turns it on rather than doing nothing
+  if (alvo.hidden) {
+    const chave = destino.replace(/^card/, "").toLowerCase();
+    const c = config.load();
+    config.save({ cards: { ...c.cards, [chave]: true } });
+    aplicarConfig();
+  }
+  alvo.scrollIntoView({ behavior: "smooth", block: "start" });
+  alvo.classList.add("destacado");
+  setTimeout(() => alvo.classList.remove("destacado"), 1600);
+}
+
+// ------------------------------------------------------------- segunda aba
+// ------------------------------------------------------------- segunda aba
+/**
+ * A screen of its own, reached from the button opposite the mascot.
+ *
+ * It is deliberately empty: what goes inside is the next decision, and an
+ * empty room with a working door is easier to furnish than a door that has to
+ * be cut later. The panel behind it keeps streaming — this covers it, it does
+ * not replace it, so nothing has to be rebuilt when the screen closes.
+ */
+function ligarAba() {
+  const aba = el("aba");
+  const btn = el("abaBtn");
+  if (!aba || !btn) return;
+
+  const abrir = () => {
+    renderInicio();
+    aba.hidden = false;
+    voz.clique?.();
+    el("abaVoltar")?.focus();
+  };
+
+  // while the home screen is up it follows the same stream the panel is on
+  setInterval(() => {
+    if (!aba.hidden) desenharHero(false);
+  }, 4000);
+  const fechar = () => {
+    aba.hidden = true;
+    btn.focus();
+  };
+
+  btn.addEventListener("click", abrir);
+  el("abaVoltar")?.addEventListener("click", fechar);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !aba.hidden) fechar();
+  });
+}
+
+// The panel opens on its home screen. This sits last because the paths it
+// draws are declared above as const, which does not hoist the way the boot
+// sequence's function calls do.
+renderInicio();
+el("aba").hidden = false;

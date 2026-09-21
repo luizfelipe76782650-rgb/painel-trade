@@ -259,6 +259,27 @@ export function volumeProfile(candles, buckets = 22) {
   return { bins, poc, vaBaixo: bins[baixo].lo, vaAlto: bins[alto].hi, total, max: bins[poc].vol };
 }
 
+/**
+ * Whether the panel takes the short side.
+ *
+ * Measured across 18 assets on 1h with fees, sells lost in all three market
+ * regimes — -0.372R while the asset rose, -0.123R sideways, and -0.103R even
+ * while it fell, which is the stretch a working short side should own. The
+ * obvious mechanical explanation was tested and ruled out: widening the short
+ * stop from 0.15 to 1.2 ATR left it at -0.143R. Dropping the side lifts the
+ * whole panel from +0.149R to +0.480R on one asset group and from -0.045R to
+ * +0.143R on a second, independent one.
+ *
+ * It is module state on purpose. The live panel, the five-timeframe scan and
+ * the backtest all reach the market through analyse(), and every past bug in
+ * this project came from those three disagreeing about the rules.
+ *
+ * What this buys is not safety. Buys lose -0.288R inside falling stretches, so
+ * the panel is a tool for rising and quiet markets, and no measurement here
+ * says otherwise.
+ */
+export const OPERA = { venda: false };
+
 export function analyse(candles, opts = {}) {
   const { depth = 0.5, zoneLimit = 6, flow = null } = opts;
 
@@ -343,6 +364,30 @@ export function analyse(candles, opts = {}) {
   result.score = Math.max(0, Math.min(100, score));
   result.reasons = reasons.length ? reasons : ["Sem sinais relevantes"];
   result.plan = buildPlan(price, a, result.score, nearSup, nearRes, result.zones);
+
+  if (!OPERA.venda && result.plan?.side === "venda") {
+    result.planoBarrado = result.plan;
+    result.plan = {
+      side: "fora",
+      motivo: "Leitura de venda — o painel opera só a compra",
+      barrado: true,
+    };
+  }
+
+  /**
+   * A trend veto was tried here and removed.
+   *
+   * Filtering entries by the direction of the 200-bar average — and by every
+   * variant of it: 100/20, 200/80, 50/20, a minimum slope, price on the same
+   * side — measured WORSE than no filter at all, on both asset groups, on 5m
+   * and 1h. What briefly looked like a large win was a bug that compared two
+   * arrays as strings and so passed only buys: on this history the assets rose,
+   * buys returned +0.427R and sells -0.135R, and the difference was the market,
+   * not the reading. Worth remembering when reading any number here: the
+   * sample Binance serves is a rising one, and none of it is evidence about
+   * how the panel behaves in a falling market.
+   */
+
   return result;
 }
 
@@ -914,4 +959,101 @@ export function testarFamilia(candles, familia, opts = {}) {
     custoMedio: operacoes.length ? custos / operacoes.length : 0,
     barras: candles.length - janela,
   };
+}
+
+// -------------------------------------------------------------------- comitê
+/**
+ * The committee: five readers, and a seat earned per asset.
+ *
+ * Each family is measured on this asset's own history, split in half, and only
+ * keeps a seat if it was profitable in BOTH halves with enough trades to mean
+ * something. A reading that only worked on one half learned that stretch of
+ * past, not the market, and its vote is worth nothing here.
+ *
+ * Measured across 20 assets on 1h, seating families this way came out at
+ * +0.086R per trade against +0.270R for the zones reading alone — the panel's
+ * default. The mode exists so the difference can be seen rather than argued;
+ * `fichaComite` reports the same numbers the seats were decided on.
+ */
+const OPS_MINIMAS = 12;
+
+export function fichaComite(candles, opts = {}) {
+  const janela = opts.janela ?? 400;
+  const uteis = candles.length - janela;
+  if (uteis < 400) return { leitores: [], barras: uteis, curto: true };
+
+  const corte = Math.floor(uteis / 2) + janela;
+  const leitores = [];
+
+  for (const [chave, ideia] of Object.entries(FAMILIAS)) {
+    const primeira = testarFamilia(candles.slice(0, corte), chave, opts);
+    const segunda = testarFamilia(candles.slice(corte - janela), chave, opts);
+    const tudo = testarFamilia(candles, chave, opts);
+    if (!tudo) continue;
+
+    const assento =
+      tudo.total >= OPS_MINIMAS &&
+      (primeira?.porOp ?? -1) > 0 &&
+      (segunda?.porOp ?? -1) > 0;
+
+    leitores.push({
+      chave,
+      nome: ideia.nome,
+      conta: ideia.conta,
+      assento,
+      ops: tudo.total,
+      porOp: tudo.porOp,
+      acerto: tudo.taxa,
+      primeira: primeira?.porOp ?? null,
+      segunda: segunda?.porOp ?? null,
+    });
+  }
+
+  leitores.sort((x, y) => Number(y.assento) - Number(x.assento) || y.porOp - x.porOp);
+  return { leitores, barras: uteis, assentos: leitores.filter((l) => l.assento).length };
+}
+
+/**
+ * Asks the seated readers what they see, and takes the first one that speaks.
+ *
+ * Returned in the same shape as `buildPlan`, so everything downstream — the
+ * chart lines, the trailing stop, the watcher — treats it as any other plan.
+ */
+export function planoComite(candles, a, assentos, opts = {}) {
+  if (!(a > 0)) return { side: "fora", motivo: "Volatilidade indefinida" };
+  if (!assentos || !assentos.length)
+    return { side: "fora", motivo: "Nenhum leitor tem assento neste ativo" };
+
+  const price = candles[candles.length - 1].close;
+
+  for (const chave of assentos) {
+    const ideia = FAMILIAS[chave];
+    if (!ideia) continue;
+
+    const sinal = ideia.gerar(candles, a, {
+      flowBars: opts.flowBars ?? 12,
+      depth: opts.depth ?? 0.5,
+      zoneLimit: opts.zoneLimit ?? 6,
+    });
+    if (!sinal) continue;
+
+    const dir = sinal.side === "compra" ? 1 : -1;
+    const stop = price + a * sinal.stop * dir;
+    const alvo = price + a * sinal.alvo * dir;
+    const risco = Math.abs(price - stop);
+    if (!(risco > 0)) continue;
+
+    return {
+      side: sinal.side,
+      entrada: price,
+      stop,
+      alvo,
+      risco,
+      rr: Math.abs(alvo - price) / risco,
+      familia: chave,
+      leitor: ideia.nome,
+    };
+  }
+
+  return { side: "fora", motivo: "Nenhum leitor com assento reconhece o gráfico agora" };
 }

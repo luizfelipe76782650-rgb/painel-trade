@@ -2335,3 +2335,505 @@ button {
   text-align: center;
   color: var(--muted);
 }
+
+/* -------------------------------------------------------------------- comitê
+   Each reader is one row: who it is on the left, what it did on the right.
+   A seat is the only state worth colouring, so everything else stays quiet. */
+.comite-chave {
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.comite-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.comite-linha {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--panel-2);
+  border-left: 3px solid var(--line);
+  opacity: 0.55;
+}
+
+.comite-linha.tem-assento {
+  opacity: 1;
+  border-left-color: var(--up);
+}
+
+.comite-nome {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 180px;
+}
+
+.comite-selo {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: var(--dim);
+}
+
+.tem-assento .comite-selo { color: var(--up); }
+
+.comite-nums {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+
+/* A reading the panel found and then refused. */
+.plan-barrado {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* ------------------------------------------------------- mapa do ativo
+   One row per timeframe, each bar reading out from a shared centre line so
+   profit and loss are told apart by side before any number is read. */
+.mapa-aviso {
+  border: 1px solid var(--down);
+  border-left-width: 3px;
+  border-radius: 8px;
+  padding: 9px 11px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--down) 8%, transparent);
+}
+
+.mapa-aviso strong { color: var(--down-soft); }
+
+.mapa-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mapa-linha {
+  display: grid;
+  grid-template-columns: 42px 1fr 64px 74px;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.mapa-linha.atual { background: var(--panel-2); }
+.mapa-linha.vazia { opacity: 0.5; }
+
+.mapa-tf {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.mapa-barra {
+  position: relative;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--line-soft);
+  overflow: hidden;
+}
+
+.mapa-zero {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--line);
+}
+
+.mapa-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 3px;
+}
+
+.mapa-val { font-size: 12px; text-align: right; }
+
+@media (max-width: 520px) {
+  .mapa-linha { grid-template-columns: 36px 1fr 58px; }
+  .mapa-linha .m-sub { display: none; }
+}
+
+/* ------------------------------------------------------------ segunda aba
+   The button sits opposite the mascot: same floating language, quieter, so
+   the two read as a pair rather than competing for the same attention. */
+.aba-btn {
+  position: fixed;
+  left: 16px;
+  top: calc(16px + env(safe-area-inset-top, 0px));
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--panel);
+  color: var(--muted);
+  cursor: pointer;
+  z-index: 40;
+  transition: color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.aba-btn:hover,
+.aba-btn:focus-visible {
+  color: #14b8a6;
+  border-color: #14b8a6;
+  transform: scale(1.06);
+}
+
+.aba {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  animation: aba-entra 0.22s ease-out both;
+}
+
+@keyframes aba-entra {
+  from { opacity: 0; transform: translateX(-12px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aba { animation: none; }
+}
+
+.aba-topo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  flex: 0 0 auto;
+}
+
+.aba-voltar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.aba-voltar:hover,
+.aba-voltar:focus-visible {
+  color: var(--text);
+  border-color: var(--muted);
+}
+
+.aba-corpo {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px;
+}
+
+/* ------------------------------------------------------------ tela inicial
+   Paths, not tiles: each row states where it goes and what is there, so the
+   screen reads as a table of contents rather than a wall of buttons. */
+.inicio-perfil {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--panel-2) center/cover no-repeat;
+  border: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--dim);
+}
+
+.inicio-saudacao {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-right: auto;
+  min-width: 0;
+}
+
+.inicio-ola {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.inicio-sub {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--dim);
+}
+
+.inicio-grade {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.caminho {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 168px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--cor);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+}
+
+/* the wide one closing the grid */
+.caminho.largo {
+  grid-column: 1 / -1;
+  min-height: 110px;
+}
+
+.caminho:hover,
+.caminho:focus-visible {
+  background: var(--panel-2);
+  border-color: var(--cor);
+  border-top-color: var(--cor);
+  transform: translateY(-2px);
+}
+
+.caminho-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+
+.caminho-icone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  color: var(--cor);
+  background: color-mix(in srgb, var(--cor) 12%, transparent);
+}
+
+.caminho-titulo {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.caminho-conta {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+/* one concrete fact, pinned to the bottom edge so every tile lines up */
+.caminho-linha {
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid var(--line-soft);
+  font-size: 10.5px;
+  letter-spacing: 0.03em;
+  color: var(--dim);
+}
+
+.caminho-seta { color: var(--dim); flex: 0 0 auto; }
+.caminho:hover .caminho-seta { color: var(--cor); }
+
+@media (max-width: 560px) {
+  .inicio-grade { grid-template-columns: 1fr; gap: 10px; }
+  .caminho { min-height: 0; }
+}
+
+.inicio-rodape {
+  max-width: 620px;
+  margin: 16px auto 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--dim);
+}
+
+/* the block a path just landed on, so the eye finds it after the scroll */
+.destacado {
+  animation: destaca 1.6s ease-out both;
+}
+
+@keyframes destaca {
+  0%, 60% { box-shadow: 0 0 0 2px #14b8a6; }
+  100%    { box-shadow: 0 0 0 0 transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .caminho, .destacado { transition: none; animation: none; }
+}
+
+/* --------------------------------------------------------------- hero vivo
+   The live asset across the top of the home screen: the line sweeps in, the
+   area fills behind it, and the last point keeps a slow pulse so the screen
+   reads as connected rather than as a picture of a chart. */
+.hero {
+  position: relative;
+  max-width: 760px;
+  margin: 0 auto 14px;
+  padding: 14px 16px 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background:
+    radial-gradient(120% 140% at 50% 0%, color-mix(in srgb, #14b8a6 7%, transparent), transparent 70%),
+    var(--panel);
+  overflow: hidden;
+  animation: hero-entra 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes hero-entra {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.hero-topo {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.hero-quem { display: flex; align-items: baseline; gap: 7px; }
+
+.hero-ativo {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.hero-tf {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dim);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+.hero-preco { display: flex; align-items: baseline; gap: 8px; }
+
+.hero-valor {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 22px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.hero-var {
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.hero-svg {
+  display: block;
+  width: 100%;
+  height: 112px;
+  margin-top: 6px;
+}
+
+.hero-area { animation: hero-sobe 0.9s 0.25s ease-out both; }
+
+@keyframes hero-sobe {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.hero-halo {
+  opacity: 0.35;
+  transform-origin: center;
+  animation: hero-pulsa 2s ease-out infinite;
+}
+
+@keyframes hero-pulsa {
+  0%   { r: 3; opacity: 0.5; }
+  70%  { r: 11; opacity: 0; }
+  100% { r: 11; opacity: 0; }
+}
+
+/* tiles arriving one after the other instead of all at once */
+.caminho {
+  animation: caminho-entra 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: var(--atraso, 0ms);
+}
+
+@keyframes caminho-entra {
+  from { opacity: 0; transform: translateY(10px) scale(0.985); }
+  to   { opacity: 1; transform: none; }
+}
+
+.caminho::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(60% 80% at 50% 0%, color-mix(in srgb, var(--cor) 16%, transparent), transparent 70%);
+  transition: opacity 0.22s ease;
+}
+
+.caminho { position: relative; }
+.caminho:hover::after,
+.caminho:focus-visible::after { opacity: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hero, .hero-area, .caminho { animation: none; }
+  .hero-halo { animation: none; opacity: 0.4; }
+}
+
+@media (max-width: 560px) {
+  .hero-svg { height: 92px; }
+  .hero-valor { font-size: 19px; }
+}
