@@ -275,3 +275,180 @@ export function volTermo(velas, segundosPorBarra) {
 
   return { curta, media, longa, razao: longa > 0 ? curta / longa : null };
 }
+
+// ------------------------------------------------------------- leque de rotas
+/**
+ * The same resampling, kept as paths rather than as endpoints.
+ *
+ * monteCarlo() answers where the account lands; this answers what it looked
+ * like on the way. Keeping the 5th, 50th and 95th percentile of the balance at
+ * every step draws the cone a real account lives inside — and the distance
+ * between the floor of that cone and zero is the drawdown someone has to be
+ * able to sit through without quitting.
+ */
+export function leque(rs, opts = {}) {
+  const { caminhos = 1200 } = opts;
+  const passos = opts.passos || (rs ? rs.length : 0);
+  if (!rs || !rs.length || passos < 5) return null;
+
+  const porPasso = Array.from({ length: passos }, () => []);
+  let ruina = 0;
+  const limiteRuina = opts.limiteRuina || -10;
+
+  for (let c = 0; c < caminhos; c++) {
+    let soma = 0;
+    let quebrou = false;
+    for (let i = 0; i < passos; i++) {
+      soma += rs[(Math.random() * rs.length) | 0];
+      porPasso[i].push(soma);
+      if (soma <= limiteRuina) quebrou = true;
+    }
+    if (quebrou) ruina++;
+  }
+
+  const faixa = (arr, p) => {
+    const o = [...arr].sort((a, b) => a - b);
+    return o[Math.min(o.length - 1, Math.floor(o.length * p))];
+  };
+
+  return {
+    baixo: porPasso.map((x) => faixa(x, 0.05)),
+    meio: porPasso.map((x) => faixa(x, 0.5)),
+    alto: porPasso.map((x) => faixa(x, 0.95)),
+    riscoDeRuina: (ruina / caminhos) * 100,
+    limiteRuina,
+  };
+}
+
+// ------------------------------------------------------------ perfil do livro
+/**
+ * Where the liquidity actually sits.
+ *
+ * A book with the same total depth can be a wall at the touch or a thin film
+ * spread over two percent, and the two behave nothing alike under an order.
+ * Counting the money inside bands around the mid price says which one this is,
+ * and whether one side is heavier than the other.
+ */
+export function perfilDoLivro(bids, asks) {
+  if (!bids || !asks || !bids.length || !asks.length) return null;
+
+  const melhorCompra = +bids[0][0];
+  const melhorVenda = +asks[0][0];
+  const meio = (melhorCompra + melhorVenda) / 2;
+  if (!(meio > 0)) return null;
+
+  const faixas = [0.001, 0.0025, 0.005, 0.01, 0.02];
+
+  /**
+   * Sums the money inside a band, and says whether the band was really covered.
+   *
+   * A thousand levels is a lot but not infinite: on a liquid pair they can run
+   * out well before one percent from the mid. Without this flag the wider bands
+   * silently repeat the last number they could reach, which reads as a deep
+   * book when it is the opposite — the end of the data.
+   */
+  const somar = (niveis, dentro) => {
+    let total = 0;
+    let alcancou = false;
+    for (const [p, q] of niveis) {
+      if (!dentro(+p)) { alcancou = true; break; }
+      total += +p * +q;
+    }
+    return { total, alcancou };
+  };
+
+  const ultimoCompra = +bids[bids.length - 1][0];
+  const ultimoVenda = +asks[asks.length - 1][0];
+
+  return {
+    spreadBps: ((melhorVenda - melhorCompra) / meio) * 10000,
+    spreadAbs: melhorVenda - melhorCompra,
+    meio,
+    alcanceCompra: ((meio - ultimoCompra) / meio) * 100,
+    alcanceVenda: ((ultimoVenda - meio) / meio) * 100,
+    faixas: faixas.map((f) => {
+      const c = somar(bids, (p) => p >= meio * (1 - f));
+      const v = somar(asks, (p) => p <= meio * (1 + f));
+      return {
+        pct: f * 100,
+        compra: c.total,
+        venda: v.total,
+        completa: c.alcancou && v.alcancou,
+      };
+    }),
+  };
+}
+
+// -------------------------------------------------------- volatilidade por hora
+/**
+ * When this asset actually moves.
+ *
+ * Averaged over enough days, the hour of the day is one of the few patterns in
+ * a market that is not a story: sessions open, desks staff up, and the range
+ * follows. Knowing the dead hours is worth as much as knowing the live ones,
+ * because a stop placed in a dead hour is a stop that survives to the open.
+ */
+export function porHora(velas, segundosPorBarra) {
+  if (!velas || velas.length < 200 || segundosPorBarra > 3600) return null;
+
+  const baldes = Array.from({ length: 24 }, () => ({ soma: 0, n: 0 }));
+  for (let i = 1; i < velas.length; i++) {
+    const c = velas[i];
+    if (!(c.open > 0)) continue;
+    const faixa = (c.high - c.low) / c.open;
+    const h = new Date(c.time).getUTCHours();
+    baldes[h].soma += faixa;
+    baldes[h].n++;
+  }
+
+  const medias = baldes.map((b, h) => ({ hora: h, faixa: b.n ? (b.soma / b.n) * 100 : null, n: b.n }));
+  const validas = medias.filter((m) => m.faixa != null && m.n >= 5);
+  if (validas.length < 12) return null;
+
+  const pico = validas.reduce((m, x) => (x.faixa > m.faixa ? x : m));
+  const morta = validas.reduce((m, x) => (x.faixa < m.faixa ? x : m));
+  return { medias, pico, morta };
+}
+
+// ------------------------------------------------- como a correlação anda mudando
+/**
+ * Whether the market is becoming one trade.
+ *
+ * Correlation is not a constant: it climbs when everything is falling together,
+ * which is exactly when a basket stops protecting anyone. Measuring it over a
+ * recent window and an older one says which direction it is heading.
+ */
+export function tendenciaCorrelacao(series, correl) {
+  if (!series || series.length < 3) return null;
+
+  const media = (fatia) => {
+    let soma = 0;
+    let n = 0;
+    for (let i = 0; i < fatia.length; i++) {
+      for (let j = i + 1; j < fatia.length; j++) {
+        const c = correl(fatia[i], fatia[j]);
+        if (c != null) { soma += c; n++; }
+      }
+    }
+    return n ? soma / n : null;
+  };
+
+  const recente = media(series.map((v) => v.slice(-180)));
+  const antiga = media(series.map((v) => v.slice(-540, -180)));
+  if (recente == null || antiga == null) return null;
+
+  return { recente, antiga, variacao: recente - antiga };
+}
+
+/** The pair that has moved together least — the only real diversification here. */
+export function melhorPar(ids, matriz) {
+  let melhor = null;
+  for (let i = 0; i < ids.length; i++) {
+    for (let j = i + 1; j < ids.length; j++) {
+      const c = matriz[i] && matriz[i][j];
+      if (c == null) continue;
+      if (!melhor || c < melhor.c) melhor = { a: ids[i], b: ids[j], c };
+    }
+  }
+  return melhor;
+}

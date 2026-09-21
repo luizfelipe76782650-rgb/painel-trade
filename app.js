@@ -15,16 +15,21 @@ import {
   varrer,
   volumeProfile,
   zoneStats,
-} from "./analysis.js?v=39";
+} from "./analysis.js?v=40";
 import {
   capacidade,
   choques,
   correlacao,
   impacto,
+  leque,
+  melhorPar,
   monteCarlo,
+  perfilDoLivro,
+  porHora,
   riscoDaCarteira,
+  tendenciaCorrelacao,
   volTermo,
-} from "./mesa.js?v=39";
+} from "./mesa.js?v=40";
 import {
   CATEGORIES,
   JANELA,
@@ -39,7 +44,7 @@ import {
   spotGold,
   tape,
   universe,
-} from "./feed.js?v=39";
+} from "./feed.js?v=40";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const el = (id) => document.getElementById(id);
@@ -4361,7 +4366,9 @@ async function rodarMonte() {
           const rs = resultadosDe(bt);
           if (!rs || rs.length < 8) { state.monte.celulas[chave] = null; continue; }
           const mc = monteCarlo(rs, { caminhos: 1500 });
-          state.monte.celulas[chave] = mc ? { ...mc, porOp: bt.porOp } : null;
+          state.monte.celulas[chave] = mc
+            ? { ...mc, porOp: bt.porOp, leque: leque(rs, { caminhos: 800 }) }
+            : null;
         } catch {
           state.monte.celulas[chave] = null;
         }
@@ -4413,6 +4420,42 @@ function renderMonte() {
       "</span>" + celulas + "</div>";
   }).join("");
 
+  /**
+   * The cone the account lives inside, not just where it ends.
+   *
+   * Three paths are drawn from one scale: the 5th percentile along the floor,
+   * the median through the middle, the 95th along the ceiling. The zero line is
+   * marked because the only question that matters while reading it is how much
+   * of the floor sits below it.
+   */
+  const desenharLeque = (lq) => {
+    if (!lq) return "";
+    const todos = [...lq.baixo, ...lq.alto, 0];
+    const lo = Math.min(...todos);
+    const hi = Math.max(...todos);
+    const faixa = hi - lo || 1;
+    const L = 300;
+    const A = 90;
+    const x = (i) => ((i / (lq.meio.length - 1)) * L).toFixed(1);
+    const y = (v) => (A - 6 - ((v - lo) / faixa) * (A - 12)).toFixed(1);
+    const linha = (arr) => arr.map((v, i) => (i ? "L" : "M") + x(i) + " " + y(v)).join(" ");
+    const area = linha(lq.alto) + " " +
+      lq.baixo.map((v, i, a) => "L" + x(a.length - 1 - i) + " " + y(a[a.length - 1 - i])).join(" ") + " Z";
+
+    return '<div class="spark-box"><span class="m-rot">AS ROTAS POSSÍVEIS</span>' +
+      '<svg class="leque" viewBox="0 0 ' + L + " " + A + '" preserveAspectRatio="none">' +
+      '<path d="' + area + '" fill="#14b8a6" opacity="0.14"/>' +
+      '<line x1="0" y1="' + y(0) + '" x2="' + L + '" y2="' + y(0) +
+        '" stroke="var(--dim)" stroke-width="1" stroke-dasharray="3 4"/>' +
+      '<path d="' + linha(lq.baixo) + '" fill="none" stroke="' + DOWN + '" stroke-width="1.4"/>' +
+      '<path d="' + linha(lq.alto) + '" fill="none" stroke="' + UP + '" stroke-width="1.4"/>' +
+      '<path d="' + linha(lq.meio) + '" fill="none" stroke="#14b8a6" stroke-width="2"/>' +
+      "</svg>" +
+      '<div class="leque-pes"><span style="color:' + DOWN + '">pior 5%</span>' +
+      '<span style="color:#14b8a6">típico</span>' +
+      '<span style="color:' + UP + '">melhor 5%</span></div></div>';
+  };
+
   const detalhe = sel
     ? '<div class="mc-detalhe"><div class="mc-tit">' + esc(state.monteSel.replace(/^f:/, "")) + "</div>" +
       '<div class="metricas">' +
@@ -4430,7 +4473,14 @@ function renderMonte() {
         '<div class="metrica"><span class="m-rot">PERDAS SEGUIDAS</span>' +
           '<span class="m-val">' + sel.perdasSeguidas.toFixed(1) + "</span>" +
           '<span class="m-sub">esperadas no caminho</span></div>' +
-      "</div>" +
+        (sel.leque
+          ? '<div class="metrica"><span class="m-rot">RISCO DE ENCOSTAR EM −10R</span>' +
+            '<span class="m-val" style="color:' +
+            (sel.leque.riscoDeRuina > 20 ? DOWN : sel.leque.riscoDeRuina > 8 ? WARN : UP) + '">' +
+            sel.leque.riscoDeRuina.toFixed(1) + "%</span>" +
+            '<span class="m-sub">em algum ponto do caminho</span></div>'
+          : "") +
+      "</div>" + desenharLeque(sel.leque) +
       '<div class="nota">A média desta célula é ' + (sel.porOp >= 0 ? "+" : "") + sel.porOp.toFixed(3) +
         "R por operação. Ainda assim, em " + (100 - sel.chanceDeLucro).toFixed(0) +
         "% dos caminhos possíveis ela termina no prejuízo, e o normal é atravessar " +
@@ -4499,7 +4549,8 @@ async function medirCapacidade() {
 
     state.cap = Object.assign(
       capacidade(livro.bids, livro.asks, stopPct, bt.porOp, taxaAtual()),
-      { vantagem: bt.porOp, ops: bt.total, timeframe: state.timeframe }
+      { vantagem: bt.porOp, ops: bt.total, timeframe: state.timeframe,
+        perfil: perfilDoLivro(livro.bids, livro.asks) }
     );
   } catch (err) {
     state.cap = { erro: err.message };
@@ -4507,6 +4558,42 @@ async function medirCapacidade() {
     state.capRodando = false;
     renderCap();
   }
+}
+
+/**
+ * Where the money is sitting in the book right now.
+ *
+ * Two books with the same total depth behave nothing alike: a wall at the touch
+ * absorbs an order, a thin film spread over a percent does not. Bands that the
+ * thousand levels could not reach are said to be out of range rather than
+ * repeating the last figure, which would read as depth when it is the opposite.
+ */
+function perfilHtml(pf) {
+  if (!pf) return "";
+
+  const maior = Math.max(...pf.faixas.map((f) => Math.max(f.compra, f.venda))) || 1;
+  const dinheiro = (v) =>
+    v >= 1e6 ? "$" + (v / 1e6).toFixed(1) + "M" : "$" + Math.round(v / 1e3) + "k";
+
+  const linhas = pf.faixas.map((f) => {
+    if (!f.completa) {
+      return '<div class="pf-linha fora"><span class="pf-pct">' + f.pct.toFixed(2) + "%</span>" +
+        '<span class="nota">além do que o livro de mil níveis alcança</span></div>';
+    }
+    return '<div class="pf-linha"><span class="pf-pct">' + f.pct.toFixed(2) + "%</span>" +
+      '<div class="pf-barras">' +
+        '<div class="pf-c" style="width:' + ((f.compra / maior) * 100).toFixed(0) + '%"></div>' +
+        '<div class="pf-v" style="width:' + ((f.venda / maior) * 100).toFixed(0) + '%"></div>' +
+      "</div>" +
+      '<span class="pf-val">' + dinheiro(f.compra) + " / " + dinheiro(f.venda) + "</span></div>";
+  }).join("");
+
+  return '<div class="pf-bloco"><div class="pf-cab"><span class="m-rot">ONDE ESTÁ O DINHEIRO</span>' +
+    '<span class="m-sub">spread ' + pf.spreadBps.toFixed(3) + " bps</span></div>" +
+    '<div class="pf-lista">' + linhas + "</div>" +
+    '<div class="nota">Compra em verde, venda em vermelho, por distância do preço médio. ' +
+    "Os mil níveis deste livro cobrem " + pf.alcanceCompra.toFixed(2) + "% abaixo e " +
+    pf.alcanceVenda.toFixed(2) + "% acima.</div></div>";
 }
 
 function renderCap() {
@@ -4554,7 +4641,7 @@ function renderCap() {
       '<div class="metrica"><span class="m-rot">TETO DESTE ATIVO</span>' +
         '<span class="m-val">$' + Math.round(c.teto).toLocaleString("pt-BR") + "</span>" +
         '<span class="m-sub">a vantagem some acima disso</span></div></div>' +
-      '<div class="cap-lista">' + linhas + "</div>" +
+      '<div class="cap-lista">' + linhas + "</div>" + perfilHtml(c.perfil) +
       '<div class="nota">Ida e volta pelo livro de 1.000 níveis, mais a corretagem escolhida, ' +
       "dividido pela distância do stop. É a pergunta que mesa faz antes de qualquer outra: " +
       "quanto dinheiro isso carrega antes de virar nada.</div>";
@@ -4607,7 +4694,14 @@ async function medirMesa() {
       }
     }
 
-    state.mesa = { ids: usados, matriz, risco, media: n ? soma / n : null };
+    state.mesa = {
+      ids: usados,
+      matriz,
+      risco,
+      media: n ? soma / n : null,
+      melhor: melhorPar(usados, matriz),
+      tendencia: tendenciaCorrelacao(dados, correlacao),
+    };
   } catch (err) {
     state.mesa = { erro: err.message };
   } finally {
@@ -4680,7 +4774,28 @@ function renderMesa() {
     '<strong>' + equivalentes.toFixed(1) + ' apostas independentes</strong>. O resto é a mesma ' +
     'aposta repetida — e é assim que uma carteira que parece espalhada perde tudo no mesmo dia.</div>';
 
-  swap(R.mesaBody, "mesa", topo + recado + '<div class="mc-grade">' + cabeca + linhas + "</div>" +
+  const extra =
+    (m.melhor
+      ? '<div class="mesa-par"><span class="m-rot">O PAR QUE MENOS ANDA JUNTO</span>' +
+        "<strong>" + esc(m.melhor.a.replace(/^f:/, "")) + " e " +
+        esc(m.melhor.b.replace(/^f:/, "")) + "</strong>" +
+        '<span class="m-sub">correlação ' + m.melhor.c.toFixed(2) +
+        " — é o mais perto de diversificação que esta lista oferece</span></div>"
+      : "") +
+    (m.tendencia
+      ? '<div class="mesa-par"><span class="m-rot">PARA ONDE A CORRELAÇÃO VAI</span>' +
+        "<strong style=\"color:" +
+        (m.tendencia.variacao > 0.05 ? DOWN : m.tendencia.variacao < -0.05 ? UP : NEU) + "\">" +
+        m.tendencia.antiga.toFixed(2) + " → " + m.tendencia.recente.toFixed(2) + "</strong>" +
+        '<span class="m-sub">' +
+        (m.tendencia.variacao > 0.05
+          ? "subindo: o mercado está virando uma aposta só"
+          : m.tendencia.variacao < -0.05
+            ? "caindo: os ativos estão se soltando um do outro"
+            : "estável nas últimas 180 horas") + "</span></div>"
+      : "");
+
+  swap(R.mesaBody, "mesa", topo + recado + extra + '<div class="mc-grade">' + cabeca + linhas + "</div>" +
     '<div class="nota">Correlação dos retornos de hora em hora nas últimas 700 barras. ' +
     'Vermelho é andar junto, verde é andar contra. Na diagonal cada ativo consigo mesmo.</div>' +
     '<button class="btn largo" id="mesaBotao">medir de novo</button>');
@@ -4737,6 +4852,10 @@ async function medirLado() {
       premio: marca && indice ? ((marca - indice) / indice) * 100 : null,
       oi: oi ? +oi.openInterest : null,
       oiVariacao: oiAgora && oiAntes ? ((oiAgora - oiAntes) / oiAntes) * 100 : null,
+      curvaVarejo: contas.map((x) => +x.longAccount * 100),
+      curvaGrandes: grandes && grandes.length ? grandes.map((x) => +x.longAccount * 100) : null,
+      curvaOi: oiHist && oiHist.length ? oiHist.map((x) => +x.sumOpenInterest) : null,
+      precoVariacao: state.data && state.data.stats ? state.data.stats.changePct : null,
     };
   } catch (err) {
     state.lado = { erro: err.message };
@@ -4744,6 +4863,30 @@ async function medirLado() {
     state.ladoRodando = false;
     renderLado();
   }
+}
+
+/**
+ * Open interest against price, which is the whole read.
+ *
+ * Positions opening while price rises is new money taking a side. Positions
+ * closing while price rises is the other side being forced out, and those two
+ * look identical on a chart while meaning opposite things about what comes next.
+ */
+function leituraOi(l) {
+  if (l.oiVariacao == null || l.precoVariacao == null) return "";
+  const oiSobe = l.oiVariacao > 0.5;
+  const oiCai = l.oiVariacao < -0.5;
+  const pSobe = l.precoVariacao > 0;
+
+  let txt;
+  let cor = NEU;
+  if (oiSobe && pSobe) { txt = "Dinheiro novo comprando. Posições abrindo com o preço subindo."; cor = UP; }
+  else if (oiSobe && !pSobe) { txt = "Dinheiro novo vendendo. Posições abrindo com o preço caindo."; cor = DOWN; }
+  else if (oiCai && pSobe) { txt = "Vendido sendo espremido para fora. Posições fechando com o preço subindo."; cor = WARN; }
+  else if (oiCai && !pSobe) { txt = "Comprado desistindo. Posições fechando com o preço caindo."; cor = WARN; }
+  else { txt = "Posições paradas. Ninguém está abrindo nem fechando em peso."; }
+
+  return '<div class="mesa-recado" style="border-left-color:' + cor + '">' + txt + "</div>";
 }
 
 function renderLado() {
@@ -4805,6 +4948,16 @@ function renderLado() {
         num(l.oiVariacao, "%", 1) + "</span>" +
         '<span class="m-sub">nas últimas 24h</span></div>' +
     "</div>" +
+    (l.curvaVarejo && l.curvaVarejo.length > 4
+      ? '<div class="spark-dupla">' +
+        '<div class="spark-box"><span class="m-rot">CONTAS COMUNS · 24H</span>' +
+        sparkline(l.curvaVarejo, WARN, 36) + "</div>" +
+        (l.curvaGrandes
+          ? '<div class="spark-box"><span class="m-rot">OS MAIORES · 24H</span>' +
+            sparkline(l.curvaGrandes, "#5c8cff", 36) + "</div>"
+          : "") + "</div>"
+      : "") +
+    leituraOi(l) +
     '<div class="nota">Posições abertas subindo com o preço é dinheiro novo entrando. Caindo ' +
     "com o preço subindo é gente sendo espremida para fora. O funding é quem paga para " +
     "continuar de pé.</div>" +
@@ -4838,6 +4991,7 @@ async function medirChoque() {
       lista,
       media,
       vol: volTermo(velas, TF_SECONDS[state.timeframe] || 3600),
+      horas: porHora(velas, TF_SECONDS[state.timeframe] || 3600),
       timeframe: state.timeframe,
       symbol: state.symbol,
     };
@@ -4913,7 +5067,37 @@ function renderChoque() {
       ? "ou seja, o choque foi o movimento todo e não sobrou continuação."
       : c.media > 0 ? "a favor do susto." : "contra o susto, devolvendo parte dele.") + "</div>";
 
-  swap(R.choqueBody, "choque", topo +
+  /**
+   * The hours this asset is actually awake.
+   *
+   * Sessions open, desks staff up, and the range follows — one of the few
+   * patterns in a market that is not a story. The dead hours matter as much as
+   * the live ones: a stop placed in a dead hour is a stop that survives.
+   */
+  const horasHtml = (() => {
+    const h = c.horas;
+    if (!h) return "";
+    const maior = Math.max(...h.medias.map((m) => m.faixa || 0)) || 1;
+    const barras = h.medias.map((m) => {
+      const alt = m.faixa == null ? 0 : (m.faixa / maior) * 100;
+      const viva = m.hora === h.pico.hora;
+      const morta = m.hora === h.morta.hora;
+      return '<div class="hora-col" title="' + m.hora + 'h UTC">' +
+        '<div class="hora-barra" style="height:' + alt.toFixed(0) + "%;background:" +
+        (viva ? UP : morta ? DOWN : "var(--line)") + '"></div>' +
+        '<span class="hora-rot">' + (m.hora % 6 === 0 ? m.hora : "") + "</span></div>";
+    }).join("");
+
+    return '<div class="hora-bloco"><div class="pf-cab">' +
+      '<span class="m-rot">QUANDO ESTE ATIVO SE MEXE</span>' +
+      '<span class="m-sub">hora UTC</span></div>' +
+      '<div class="hora-grade">' + barras + "</div>" +
+      '<div class="nota">Mais forte às <strong>' + h.pico.hora + "h</strong> (" +
+      h.pico.faixa.toFixed(2) + "% de faixa média) e mais parado às <strong>" +
+      h.morta.hora + "h</strong> (" + h.morta.faixa.toFixed(2) + "%).</div></div>";
+  })();
+
+  swap(R.choqueBody, "choque", topo + horasHtml +
     '<div class="choque-cab"><span>quando</span><span>movimento</span><span>tamanho</span>' +
     "<span>12 barras depois</span></div>" +
     '<div class="choque-lista">' + linhas + "</div>" + veredito +
@@ -5038,8 +5222,19 @@ async function medirSentimento() {
       }
     }
 
+    // quanto tempo desde a última visita a cada extremo
+    const desde = (teste) => {
+      for (let i = serie.length - 1; i >= 0; i--) {
+        if (teste(serie[i].v)) return Math.round((Date.now() - serie[i].t) / 864e5);
+      }
+      return null;
+    };
+
     state.sent = {
       hoje,
+      curva: serie.slice(-90).map((d) => d.v),
+      desdeMedo: desde((v) => v <= 25),
+      desdeGanancia: desde((v) => v >= 75),
       faixas,
       dias: serie.length,
       procurados: alta && alta.coins
@@ -5109,12 +5304,26 @@ function renderSent() {
       "termômetro do humor, nunca como sinal de entrada.</div>"
     : "";
 
+  const historia = s.curva && s.curva.length > 10
+    ? '<div class="spark-box"><span class="m-rot">ÚLTIMOS 90 DIAS</span>' +
+      sparkline(s.curva, col, 40) + "</div>"
+    : "";
+
+  const extremos = '<div class="metricas">' +
+    '<div class="metrica"><span class="m-rot">DESDE O ÚLTIMO MEDO</span>' +
+      '<span class="m-val">' + (s.desdeMedo == null ? "—" : s.desdeMedo) + "</span>" +
+      '<span class="m-sub">dias abaixo de 25</span></div>' +
+    '<div class="metrica"><span class="m-rot">DESDE A ÚLTIMA GANÂNCIA</span>' +
+      '<span class="m-val">' + (s.desdeGanancia == null ? "—" : s.desdeGanancia) + "</span>" +
+      '<span class="m-sub">dias acima de 75</span></div>' +
+    "</div>";
+
   const procurados = s.procurados
     ? '<div class="sent-busca"><span class="m-rot">MAIS PROCURADOS AGORA</span><div class="sent-tags">' +
       s.procurados.map((t) => '<span class="sent-tag">' + esc(t) + "</span>").join("") + "</div></div>"
     : "";
 
-  swap(R.sentBody, "sent", medidor + tabela + veredito + procurados +
+  swap(R.sentBody, "sent", medidor + historia + extremos + tabela + veredito + procurados +
     '<button class="btn largo" id="sentBotao">atualizar</button>');
   el("sentBotao")?.addEventListener("click", medirSentimento);
 }

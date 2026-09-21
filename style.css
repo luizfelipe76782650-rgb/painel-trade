@@ -3190,3 +3190,134 @@ button {
   .sent-cab, .sent-linha { grid-template-columns: 1fr 70px 46px; }
   .sent-cab span:nth-child(2), .sent-linha span:nth-child(2) { display: none; }
 }
+
+/* ------------------------------------------------------ o leque de rotas
+   Three percentile paths on one scale, with zero marked: while reading it the
+   only question is how much of the floor sits below that line. */
+.leque {
+  display: block;
+  width: 100%;
+  height: 90px;
+  margin-top: 4px;
+}
+
+.leque-pes {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 3px;
+  font-size: 9.5px;
+  letter-spacing: 0.05em;
+}
+
+/* ------------------------------------------------------- perfil do livro */
+.pf-bloco { margin-top: 14px; }
+
+.pf-cab {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.pf-lista { display: flex; flex-direction: column; gap: 3px; }
+
+.pf-linha {
+  display: grid;
+  grid-template-columns: 46px 1fr 104px;
+  gap: 8px;
+  align-items: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.pf-linha.fora { grid-template-columns: 46px 1fr; opacity: 0.55; }
+
+.pf-pct {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.pf-barras {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pf-c, .pf-v {
+  height: 6px;
+  border-radius: 3px;
+  min-width: 2px;
+  transition: width 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.pf-c { background: var(--up); }
+.pf-v { background: var(--down); }
+
+.pf-val {
+  font-size: 10.5px;
+  color: var(--dim);
+  text-align: right;
+}
+
+/* ------------------------------------------------------------- mesa: pares */
+.mesa-par {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 11px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+
+.mesa-par strong {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* ----------------------------------------------------- duas linhas lado a lado */
+.spark-dupla {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 10px 0;
+}
+
+/* ------------------------------------------------------------ hora do dia */
+.hora-bloco { margin-top: 14px; }
+
+.hora-grade {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 64px;
+}
+
+.hora-col {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  height: 100%;
+  gap: 3px;
+}
+
+.hora-barra {
+  width: 100%;
+  border-radius: 2px 2px 0 0;
+  min-height: 2px;
+  transition: height 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.hora-rot {
+  font-size: 8.5px;
+  color: var(--dim);
+  height: 10px;
+}
+
+@media (max-width: 560px) {
+  .spark-dupla { grid-template-columns: 1fr; }
+  .pf-linha { grid-template-columns: 40px 1fr 84px; }
+  .pf-val { font-size: 9.5px; }
+}
