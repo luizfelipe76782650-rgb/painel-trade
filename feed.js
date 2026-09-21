@@ -1,0 +1,506 @@
+/**
+ * Market data with provider fallback.
+ *
+ * A single exchange is a single point of failure: Binance answers 451 from some
+ * networks and regions, and a panel that knows only one source goes blank there.
+ * Each provider below exposes the same shape, and the feed moves to the next one
+ * whenever the current one stops answering.
+ */
+
+export const SYMBOLS = [
+  { id: "BTC", label: "BTC", binance: "BTCUSDT", coinbase: "BTC-USD", kraken: "XBTUSD" },
+  { id: "ETH", label: "ETH", binance: "ETHUSDT", coinbase: "ETH-USD", kraken: "ETHUSD" },
+  { id: "SOL", label: "SOL", binance: "SOLUSDT", coinbase: "SOL-USD", kraken: "SOLUSD" },
+  { id: "XRP", label: "XRP", binance: "XRPUSDT", coinbase: "XRP-USD", kraken: "XRPUSD" },
+  { id: "ADA", label: "ADA", binance: "ADAUSDT", coinbase: "ADA-USD", kraken: "ADAUSD" },
+  { id: "LINK", label: "LINK", binance: "LINKUSDT", coinbase: "LINK-USD", kraken: "LINKUSD" },
+];
+
+export const TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h", "1d"];
+
+/**
+ * Asset groups. Binance lists no equities — its stock tokens ended in 2021 —
+ * so "commodities" is tokenised gold, the only one that actually trades there.
+ * Every group is filtered against the live exchange listing, so a coin that
+ * was delisted simply stops appearing instead of erroring when picked.
+ */
+export const CATEGORIES = [
+  {
+    id: "principais",
+    classe: "Cripto",
+    label: "Principais",
+    assets: ["BTC", "ETH", "BNB", "SOL", "XRP", "ADA", "DOGE", "TRX", "AVAX", "LINK", "DOT", "LTC", "BCH"],
+  },
+  {
+    id: "l1",
+    classe: "Cripto",
+    label: "Camada 1",
+    assets: ["ETH", "SOL", "AVAX", "NEAR", "APT", "SUI", "SEI", "TIA", "ATOM", "DOT", "ADA", "ALGO", "TON", "INJ", "FTM"],
+  },
+  {
+    id: "defi",
+    classe: "Cripto",
+    label: "DeFi",
+    assets: ["UNI", "AAVE", "MKR", "CRV", "LDO", "COMP", "SNX", "SUSHI", "1INCH", "CAKE", "PENDLE", "ENA", "JUP", "RAY"],
+  },
+  {
+    id: "meme",
+    classe: "Cripto",
+    label: "Memecoins",
+    assets: ["DOGE", "SHIB", "PEPE", "WIF", "BONK", "FLOKI", "BOME", "MEME", "NEIRO", "PNUT", "TURBO", "ACT", "BRETT"],
+  },
+  {
+    id: "ia",
+    classe: "Cripto",
+    label: "IA & dados",
+    assets: ["FET", "RENDER", "TAO", "GRT", "AR", "FIL", "THETA", "WLD", "ARKM", "NFP", "PHB"],
+  },
+  {
+    id: "games",
+    classe: "Cripto",
+    label: "Games & metaverso",
+    assets: ["AXS", "SAND", "MANA", "GALA", "IMX", "ENJ", "APE", "BEAMX", "PIXEL", "ACE", "YGG"],
+  },
+  { id: "todas", classe: "Cripto", label: "Todas as moedas", assets: null },
+
+  // gold that actually trades on the exchange: each token is backed by an ounce
+  // and tracks XAU/USD, which is the closest thing to XAUUSD available here
+  { id: "ouro", classe: "Commodities", label: "Ouro", assets: ["PAXG", "XAUT"] },
+
+  { id: "cambio", classe: "Câmbio", label: "Moedas", assets: ["EUR", "GBP", "AUD", "JPY", "TRY"] },
+];
+
+export const TF_SECONDS = { "1m": 60, "5m": 300, "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400 };
+const SECONDS = TF_SECONDS;
+
+async function getJson(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(String(res.status));
+  return res.json();
+}
+
+// ---------------------------------------------------------------- Binance
+const binance = {
+  name: "Binance",
+  key: "binance",
+
+  async candles(sym, tf) {
+    const raw = await getJson(
+      `https://api.binance.com/api/v3/klines?symbol=${sym}&interval=${tf}&limit=150`
+    );
+    // k[9] is taker buy volume, so the rest of the bar's volume was sold into
+    // the bid: real per-candle delta, not an inference from the candle's colour
+    return raw.map((k) => {
+      const volume = +k[5];
+      const buy = +k[9];
+      return {
+        time: k[0],
+        open: +k[1],
+        high: +k[2],
+        low: +k[3],
+        close: +k[4],
+        volume,
+        delta: buy - (volume - buy),
+      };
+    });
+  },
+
+  async stats(sym) {
+    const d = await getJson(`https://api.binance.com/api/v3/ticker/24hr?symbol=${sym}`);
+    return { price: +d.lastPrice, changePct: +d.priceChangePercent };
+  },
+
+  async trades(sym) {
+    const raw = await getJson(`https://api.binance.com/api/v3/trades?symbol=${sym}&limit=500`);
+    // isBuyerMaker true => the aggressor was the seller
+    return raw.map((t) => ({ price: +t.price, qty: +t.qty, buyerAggressor: !t.isBuyerMaker }));
+  },
+
+  async book(sym) {
+    const d = await getJson(`https://api.binance.com/api/v3/depth?symbol=${sym}&limit=20`);
+    return {
+      bids: d.bids.map(([p, q]) => ({ price: +p, qty: +q })),
+      asks: d.asks.map(([p, q]) => ({ price: +p, qty: +q })),
+    };
+  },
+};
+
+// ---------------------------------------------------------------- Coinbase
+const coinbase = {
+  name: "Coinbase",
+  key: "coinbase",
+
+  async candles(sym, tf) {
+    const raw = await getJson(
+      `https://api.exchange.coinbase.com/products/${sym}/candles?granularity=${SECONDS[tf]}`
+    );
+    // [time, low, high, open, close, volume], newest first
+    return raw
+      .map((c) => ({
+        time: c[0] * 1000,
+        low: +c[1],
+        high: +c[2],
+        open: +c[3],
+        close: +c[4],
+        volume: +c[5],
+      }))
+      .reverse()
+      .slice(-150);
+  },
+
+  async stats(sym) {
+    const d = await getJson(`https://api.exchange.coinbase.com/products/${sym}/stats`);
+    const open = +d.open;
+    const last = +d.last;
+    return { price: last, changePct: open ? ((last - open) / open) * 100 : 0 };
+  },
+
+  async trades(sym) {
+    const raw = await getJson(`https://api.exchange.coinbase.com/products/${sym}/trades?limit=200`);
+    // Coinbase reports the MAKER side: a "sell" maker means the taker bought
+    return raw.map((t) => ({
+      price: +t.price,
+      qty: +t.size,
+      buyerAggressor: t.side === "sell",
+    }));
+  },
+
+  async book(sym) {
+    const d = await getJson(`https://api.exchange.coinbase.com/products/${sym}/book?level=2`);
+    return {
+      bids: d.bids.slice(0, 20).map(([p, q]) => ({ price: +p, qty: +q })),
+      asks: d.asks.slice(0, 20).map(([p, q]) => ({ price: +p, qty: +q })),
+    };
+  },
+};
+
+// ---------------------------------------------------------------- Kraken
+const kraken = {
+  name: "Kraken",
+  key: "kraken",
+
+  async candles(sym, tf) {
+    const d = await getJson(
+      `https://api.kraken.com/0/public/OHLC?pair=${sym}&interval=${SECONDS[tf] / 60}`
+    );
+    const rows = Object.values(d.result).find(Array.isArray) || [];
+    return rows
+      .map((r) => ({
+        time: r[0] * 1000,
+        open: +r[1],
+        high: +r[2],
+        low: +r[3],
+        close: +r[4],
+        volume: +r[6],
+      }))
+      .slice(-150);
+  },
+
+  async stats(sym) {
+    const d = await getJson(`https://api.kraken.com/0/public/Ticker?pair=${sym}`);
+    const t = Object.values(d.result)[0];
+    const last = +t.c[0];
+    const open = +t.o;
+    return { price: last, changePct: open ? ((last - open) / open) * 100 : 0 };
+  },
+
+  async trades(sym) {
+    const d = await getJson(`https://api.kraken.com/0/public/Trades?pair=${sym}`);
+    const rows = Object.values(d.result).find(Array.isArray) || [];
+    // [price, volume, time, side, ordertype, misc] — "b" marks an aggressive buy
+    return rows.slice(-200).map((r) => ({
+      price: +r[0],
+      qty: +r[1],
+      buyerAggressor: r[3] === "b",
+    }));
+  },
+
+  async book(sym) {
+    const d = await getJson(`https://api.kraken.com/0/public/Depth?pair=${sym}&count=20`);
+    const b = Object.values(d.result)[0];
+    return {
+      bids: b.bids.map(([p, q]) => ({ price: +p, qty: +q })),
+      asks: b.asks.map(([p, q]) => ({ price: +p, qty: +q })),
+    };
+  },
+};
+
+const PROVIDERS = [binance, coinbase, kraken];
+
+/** The provider currently answering; stays chosen until it fails. */
+let active = null;
+
+const ASSETS = new Map(SYMBOLS.map((s) => [s.id, s]));
+
+function symbolFor(provider, id) {
+  return ASSETS.get(id)?.[provider.key];
+}
+
+let listing = null;
+
+/**
+ * Everything trading against USDT on Binance right now, read from the exchange
+ * itself. The fallback providers get a derived symbol; when a pair does not
+ * exist there, that provider simply fails and the next one is tried.
+ */
+export function universe() {
+  if (listing) return listing;
+
+  listing = getJson("https://api.binance.com/api/v3/exchangeInfo")
+    .then((info) => {
+      const out = [];
+
+      for (const s of info.symbols) {
+        if (s.status !== "TRADING" || s.quoteAsset !== "USDT") continue;
+        if (s.isSpotTradingAllowed === false) continue;
+
+        const base = s.baseAsset;
+        // leveraged tokens track a multiple of a price, not the asset itself
+        if (/(UP|DOWN|BULL|BEAR)$/.test(base) && base.length > 4) continue;
+
+        const known = ASSETS.get(base);
+        const asset = known || {
+          id: base,
+          label: base,
+          binance: s.symbol,
+          coinbase: `${base}-USD`,
+          kraken: `${base}USD`,
+        };
+        ASSETS.set(base, asset);
+        out.push(asset);
+      }
+
+      out.sort((a, b) => a.id.localeCompare(b.id));
+      return out;
+    })
+    .catch(() => SYMBOLS); // the six majors still work if the listing fails
+
+  return listing;
+}
+
+/**
+ * One full snapshot, moving down the provider list on failure. Returns which
+ * source served it, so the panel can name the data it is showing.
+ */
+export async function snapshot(symbolId, timeframe) {
+  const ordered = active ? [active, ...PROVIDERS.filter((p) => p !== active)] : PROVIDERS;
+  const failures = [];
+
+  for (const provider of ordered) {
+    const sym = symbolFor(provider, symbolId);
+    if (!sym) continue;
+
+    try {
+      const [candles, stats, trades, book] = await Promise.all([
+        provider.candles(sym, timeframe),
+        provider.stats(sym),
+        provider.trades(sym).catch(() => []),
+        provider.book(sym).catch(() => null),
+      ]);
+
+      if (!candles.length) throw new Error("sem candles");
+
+      active = provider;
+      return { candles, stats, trades, book, source: provider.name, failures };
+    } catch (err) {
+      failures.push(`${provider.name} ${err.message}`);
+      if (active === provider) active = null;
+    }
+  }
+
+  throw new Error(`nenhuma fonte respondeu (${failures.join(", ")})`);
+}
+
+/** Prices for the top strip, from whichever provider is currently working. */
+export async function tape() {
+  const provider = active || PROVIDERS[0];
+  const out = [];
+
+  for (const s of SYMBOLS) {
+    const sym = symbolFor(provider, s.id);
+    if (!sym) continue;
+    try {
+      const st = await provider.stats(sym);
+      out.push({ sym: s.label, val: st.price, chg: st.changePct });
+    } catch {
+      /* a symbol that fails is left out rather than shown as zero */
+    }
+  }
+
+  return out;
+}
+
+/* ------------------------------------------------------------------ streams
+ * REST answers once every few seconds, so the panel moved in jumps. These
+ * sockets deliver every print as the exchange publishes it — price, the open
+ * candle, aggression and the book all arrive continuously.
+ *
+ * Kraken's public socket speaks a different symbol format than its REST API,
+ * so it has no stream here and keeps the polling path; the panel stays correct
+ * there, only less fluid.
+ */
+/**
+ * Offset between this machine's clock and the exchange's, so the lag we report
+ * is the data's travel time and not a wrong clock on the viewer's device.
+ */
+let clockOffset = 0;
+
+async function syncClock() {
+  try {
+    const t0 = Date.now();
+    const { serverTime } = await getJson("https://api.binance.com/api/v3/time");
+    const t1 = Date.now();
+    clockOffset = serverTime - (t0 + (t1 - t0) / 2);
+  } catch {
+    clockOffset = 0;
+  }
+}
+
+const SOCKETS = {
+  binance(sym, tf, on) {
+    const s = sym.toLowerCase();
+    const ws = new WebSocket(
+      `wss://stream.binance.com:9443/stream?streams=` +
+        [`${s}@aggTrade`, `${s}@kline_${tf}`, `${s}@depth20@100ms`, `${s}@ticker`].join("/")
+    );
+
+    ws.onmessage = (ev) => {
+      const { stream, data } = JSON.parse(ev.data);
+
+      if (stream.includes("@aggTrade")) {
+        // m marks the buyer as maker, so the aggressor was the seller
+        on.trade({ price: +data.p, qty: +data.q, buyerAggressor: !data.m });
+        on.price(+data.p);
+        on.lag(Date.now() + clockOffset - data.T);
+      } else if (stream.includes("@kline")) {
+        const k = data.k;
+        const volume = +k.v;
+        const buy = +k.V;
+        on.candle({
+          time: k.t,
+          open: +k.o,
+          high: +k.h,
+          low: +k.l,
+          close: +k.c,
+          volume,
+          delta: buy - (volume - buy),
+          closed: k.x,
+        });
+      } else if (stream.includes("@depth")) {
+        on.book({
+          bids: data.bids.map(([p, q]) => ({ price: +p, qty: +q })),
+          asks: data.asks.map(([p, q]) => ({ price: +p, qty: +q })),
+        });
+      } else if (stream.includes("@ticker")) {
+        on.stats({ price: +data.c, changePct: +data.P });
+      }
+    };
+
+    return ws;
+  },
+
+  coinbase(sym, tf, on) {
+    const ws = new WebSocket("wss://ws-feed.exchange.coinbase.com");
+
+    ws.onopen = () =>
+      ws.send(
+        JSON.stringify({ type: "subscribe", product_ids: [sym], channels: ["ticker", "matches"] })
+      );
+
+    ws.onmessage = (ev) => {
+      const d = JSON.parse(ev.data);
+
+      if (d.type === "ticker" && d.price) {
+        const open = +d.open_24h;
+        const last = +d.price;
+        on.price(last);
+        on.stats({ price: last, changePct: open ? ((last - open) / open) * 100 : 0 });
+      } else if ((d.type === "match" || d.type === "last_match") && d.price) {
+        // Coinbase names the MAKER side: a "sell" maker means the taker bought
+        on.trade({ price: +d.price, qty: +d.size, buyerAggressor: d.side === "sell" });
+        on.price(+d.price);
+      }
+    };
+
+    return ws;
+  },
+};
+
+/**
+ * Opens a live stream for the provider currently serving snapshots. Reconnects
+ * on its own, and reports whether a stream exists at all so the caller knows
+ * to keep polling harder when it does not.
+ */
+export function stream(symbolId, timeframe, on) {
+  const provider = active || PROVIDERS[0];
+  const open = SOCKETS[provider.key];
+  const sym = symbolFor(provider, symbolId);
+
+  if (!open || !sym) return { live: false, close() {} };
+  if (provider.key === "binance") syncClock();
+
+  let ws = null;
+  let retry = null;
+  let closed = false;
+  let wait = 1000;
+
+  const connect = () => {
+    if (closed) return;
+    try {
+      ws = open(sym, timeframe, on);
+    } catch {
+      return schedule();
+    }
+    // the provider may have set onopen to send its subscribe frame, so this
+    // listener is added rather than assigned
+    ws.addEventListener("open", () => {
+      wait = 1000;
+      on.status(true);
+    });
+    ws.onclose = () => {
+      on.status(false);
+      schedule();
+    };
+    ws.onerror = () => ws.close();
+  };
+
+  const schedule = () => {
+    if (closed) return;
+    clearTimeout(retry);
+    retry = setTimeout(connect, wait);
+    wait = Math.min(wait * 2, 15000); // back off rather than hammer the exchange
+  };
+
+  connect();
+
+  return {
+    live: true,
+    close() {
+      closed = true;
+      clearTimeout(retry);
+      if (ws) {
+        ws.onclose = null;
+        ws.close();
+      }
+    },
+  };
+}
+
+/**
+ * Spot XAU/USD, the real gold price.
+ *
+ * The tokens on the exchange are backed by an ounce each, but they are their
+ * own market and drift from spot. This gives the panel the actual number to
+ * show beside them, so the gap is visible instead of assumed away. It is a
+ * price only — no candles — so it never drives the chart.
+ */
+let goldPrice = 0;
+let goldAt = 0;
+
+export async function spotGold() {
+  if (Date.now() - goldAt < 30000) return goldPrice;
+  const d = await getJson("https://api.gold-api.com/price/XAU");
+  goldPrice = +d.price;
+  goldAt = Date.now();
+  return goldPrice;
+}

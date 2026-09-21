@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Painel de Trading</title>
+    <meta
+      name="description"
+      content="Painel de leitura de mercado com zonas, delta de agressão, livro de ofertas e plano de operação, em dados públicos ao vivo."
+    />
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+    />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div class="app">
+      <!-- fita de cotações -->
+      <div class="tape-strip"><div class="tape" id="tape"></div></div>
+
+      <div class="body">
+        <!-- coluna esquerda -->
+        <aside class="side" id="side"></aside>
+
+        <!-- centro: cabeçalho + gráfico -->
+        <section class="center">
+          <header class="chart-head">
+            <span class="sym" id="chartSym">—</span>
+            <select id="symbol" class="mini"></select>
+            <select id="category" class="mini"></select>
+            <select id="timeframe" class="mini"></select>
+            <span id="hdr" class="hdr"></span>
+
+            <div class="head-right">
+              <span class="dot beat" id="statusDot"></span>
+              <span class="source" id="statusText">conectando…</span>
+              <button class="btn" id="bLive">Pausar</button>
+              <button class="btn" id="bSr">S&amp;R</button>
+              <button class="btn" id="bFvg">FVG</button>
+            </div>
+          </header>
+
+          <div class="chart-wrap" id="chartWrap">
+            <svg id="chart" viewBox="0 0 1002 792"></svg>
+            <div class="pills" id="pills"></div>
+          </div>
+
+          <div class="chart-foot">
+            <div class="controls">
+              <label
+                ><span>ZONA <b id="depthVal">0.5</b>× ATR</span>
+                <input id="depth" type="range" min="0.1" max="2" step="0.1" value="0.5"
+              /></label>
+              <label
+                ><span>NÍVEIS <b id="zonesVal">6</b></span>
+                <input id="zones" type="range" min="1" max="10" step="1" value="6"
+              /></label>
+              <label
+                ><span>ZOOM <b id="zoomVal">150</b> barras</span>
+                <input id="zoom" type="range" min="1" max="10" step="0.5" value="1"
+              /></label>
+              <label
+                ><span>MARGEM <b id="marginVal">8</b></span>
+                <input id="margin" type="range" min="0" max="40" step="1" value="8"
+              /></label>
+            </div>
+            <span class="hint" id="zoomLabel">pince ou arraste o eixo para ajustar</span>
+          </div>
+        </section>
+
+        <!-- coluna direita: book -->
+        <aside class="book-col">
+          <div class="book-head">
+            <span class="lbl">BOOK</span><span class="muted">profundidade</span>
+          </div>
+          <div class="book-cols">
+            <span>COMPRA</span><span class="mid">PREÇO</span><span class="right">VENDA</span>
+          </div>
+          <div id="book" class="book"></div>
+        </aside>
+      </div>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
