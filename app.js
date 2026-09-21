@@ -15,7 +15,7 @@ import {
   varrer,
   volumeProfile,
   zoneStats,
-} from "./analysis.js?v=34";
+} from "./analysis.js?v=35";
 import {
   CATEGORIES,
   JANELA,
@@ -30,7 +30,7 @@ import {
   spotGold,
   tape,
   universe,
-} from "./feed.js?v=34";
+} from "./feed.js?v=35";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const el = (id) => document.getElementById(id);
@@ -3656,6 +3656,7 @@ renderComite();
 renderMapa();
 ligarMascote();
 ligarAba();
+ligarSub();
 ligarConta();
 buildControls();
 aplicarConfig();
@@ -4091,12 +4092,26 @@ function desenharHero(entrando) {
   alvo.style.color = v == null ? NEU : v >= 0 ? UP : DOWN;
 }
 
-/** Closes the home screen and lands on whatever the path named. */
+/**
+ * Where a path leads.
+ *
+ * Only "Operar" hands the screen over to the panel. Every other path opens on
+ * its own, because landing someone inside the chart to read a table means they
+ * arrive somewhere that looks like it wants them to trade, when they came to
+ * look something up.
+ *
+ * The block is moved rather than copied — its live render functions write to
+ * that exact element, so a duplicate would be the one going stale. A marker
+ * holds its place in the panel and puts it back on the way out.
+ */
+let subMarcador = null;
+let subCartao = null;
+
 function irPara(destino) {
   voz.clique?.();
-  el("aba").hidden = true;
 
   if (destino === "operar") {
+    el("aba").hidden = true;
     window.scrollTo({ top: 0, behavior: "smooth" });
     return;
   }
@@ -4105,19 +4120,51 @@ function irPara(destino) {
     return;
   }
 
-  const alvo = el(destino);
-  if (!alvo) return;
+  const cartao = el(destino);
+  if (!cartao) return;
 
-  // a path that lands on a hidden block turns it on rather than doing nothing
-  if (alvo.hidden) {
+  // a block switched off in the settings still opens from here
+  if (cartao.hidden) {
     const chave = destino.replace(/^card/, "").toLowerCase();
     const c = config.load();
     config.save({ cards: { ...c.cards, [chave]: true } });
     aplicarConfig();
   }
-  alvo.scrollIntoView({ behavior: "smooth", block: "start" });
-  alvo.classList.add("destacado");
-  setTimeout(() => alvo.classList.remove("destacado"), 1600);
+
+  fecharSub();
+
+  subMarcador = document.createComment("cartao em uso");
+  cartao.parentNode.insertBefore(subMarcador, cartao);
+  subCartao = cartao;
+
+  const titulo = cartao.querySelector(".lbl")?.textContent?.trim() || "";
+  el("subTitulo").textContent = titulo;
+  el("subCorpo").replaceChildren(cartao);
+  el("sub").hidden = false;
+  el("subCorpo").scrollTop = 0;
+  el("subVoltar").focus();
+}
+
+/** Puts the block back in the panel exactly where it was. */
+function fecharSub() {
+  if (subCartao && subMarcador?.parentNode) {
+    subMarcador.parentNode.insertBefore(subCartao, subMarcador);
+    subMarcador.remove();
+  }
+  subMarcador = null;
+  subCartao = null;
+  el("sub").hidden = true;
+}
+
+function ligarSub() {
+  el("subVoltar")?.addEventListener("click", () => {
+    fecharSub();
+    voz.clique?.();
+    el("abaBtn")?.focus();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !el("sub").hidden) fecharSub();
+  });
 }
 
 // ------------------------------------------------------------- segunda aba
@@ -4147,6 +4194,7 @@ function ligarAba() {
     if (!aba.hidden) desenharHero(false);
   }, 4000);
   const fechar = () => {
+    fecharSub();
     aba.hidden = true;
     btn.focus();
   };

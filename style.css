@@ -2697,18 +2697,8 @@ button {
   color: var(--dim);
 }
 
-/* the block a path just landed on, so the eye finds it after the scroll */
-.destacado {
-  animation: destaca 1.6s ease-out both;
-}
-
-@keyframes destaca {
-  0%, 60% { box-shadow: 0 0 0 2px #14b8a6; }
-  100%    { box-shadow: 0 0 0 0 transparent; }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .caminho, .destacado { transition: none; animation: none; }
+  .caminho { transition: none; animation: none; }
 }
 
 /* --------------------------------------------------------------- hero vivo
@@ -2836,4 +2826,49 @@ button {
 @media (max-width: 560px) {
   .hero-svg { height: 92px; }
   .hero-valor { font-size: 19px; }
+}
+
+/* ------------------------------------------------------------ tela de bloco
+   A path other than "Operar" opens here instead of dropping the reader into
+   the chart. It sits above the home screen, so going back lands on the paths
+   again rather than on the panel. */
+.sub {
+  position: fixed;
+  inset: 0;
+  z-index: 56;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  animation: sub-entra 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes sub-entra {
+  from { opacity: 0; transform: translateX(14px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.sub-corpo {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 14px 16px 24px;
+}
+
+/* the block arrives as the whole screen, not as one card among many */
+.sub-corpo > .deep-card {
+  max-width: 760px;
+  margin: 0 auto;
+  border: 0;
+  background: none;
+  padding: 0;
+}
+
+.sub-corpo > .deep-card > .plan-head {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sub { animation: none; }
 }
