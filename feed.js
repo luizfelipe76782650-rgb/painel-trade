@@ -351,6 +351,14 @@ function symbolFor(provider, id) {
 
 let listing = null;
 
+/** Base asset to perpetual symbol, filled from the futures listing. */
+const FUTUROS = new Map();
+
+/** The perpetual behind an asset, when the exchange lists one. */
+export function futuresSymbol(id) {
+  return id.startsWith("f:") ? ASSETS.get(id)?.futures : FUTUROS.get(id);
+}
+
 /**
  * Everything trading against USDT on Binance right now, read from the exchange
  * itself. The fallback providers get a derived symbol; when a pair does not
@@ -389,8 +397,14 @@ export function universe() {
     const out = [];
 
     for (const s of info.symbols) {
-      if (s.status !== "TRADING" || s.contractType !== "TRADIFI_PERPETUAL") continue;
-      if (s.quoteAsset !== "USDT") continue;
+      if (s.status !== "TRADING" || s.quoteAsset !== "USDT") continue;
+
+      // perpetuals only: the quarterly delivery contracts share a base asset
+      // and would otherwise shadow the perpetual everyone actually watches
+      const perp = s.contractType === "PERPETUAL" || s.contractType === "TRADIFI_PERPETUAL";
+      if (perp) FUTUROS.set(s.baseAsset, s.symbol);
+
+      if (s.contractType !== "TRADIFI_PERPETUAL") continue;
 
       const asset = { id: `f:${s.baseAsset}`, label: s.baseAsset, futures: s.symbol };
       ASSETS.set(asset.id, asset);
@@ -643,4 +657,44 @@ export async function spotGold() {
   goldPrice = +d.price;
   goldAt = Date.now();
   return goldPrice;
+}
+
+/**
+ * Positioning around a contract: what longs pay shorts, how much money is
+ * committed, and how the crowd is leaning.
+ *
+ * The two long/short readings are deliberately separate. One counts every
+ * account, the other weighs the largest positions — and when they disagree,
+ * that disagreement is the information.
+ */
+export async function positioning(symbolId) {
+  const sym = futuresSymbol(symbolId);
+  if (!sym) return null;
+
+  const hist = (path, extra = "") =>
+    getJson(`https://fapi.binance.com/futures/data/${path}?symbol=${sym}&period=5m&limit=48${extra}`)
+      .catch(() => []);
+
+  const [premio, oi, contas, grandes, taker] = await Promise.all([
+    getJson(`${FAPI}/premiumIndex?symbol=${sym}`).catch(() => null),
+    hist("openInterestHist"),
+    hist("globalLongShortAccountRatio"),
+    hist("topLongShortPositionRatio"),
+    hist("takerlongshortRatio"),
+  ]);
+
+  const ultimo = (arr) => (arr.length ? arr[arr.length - 1] : null);
+  const c = ultimo(contas);
+  const g = ultimo(grandes);
+
+  return {
+    simbolo: sym,
+    funding: premio ? +premio.lastFundingRate : null,
+    proximoFunding: premio ? +premio.nextFundingTime : null,
+    marca: premio ? +premio.markPrice : null,
+    oi: oi.map((r) => ({ valor: +r.sumOpenInterestValue, qtd: +r.sumOpenInterest })),
+    contas: c ? { compradas: +c.longAccount, vendidas: +c.shortAccount } : null,
+    grandes: g ? { compradas: +g.longAccount, vendidas: +g.shortAccount } : null,
+    taker: taker.map((r) => ({ compra: +r.buyVol, venda: +r.sellVol, razao: +r.buySellRatio })),
+  };
 }

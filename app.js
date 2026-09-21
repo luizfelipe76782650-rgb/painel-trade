@@ -4,8 +4,9 @@ import {
   flowFromCandles,
   sma,
   cvdSeries,
+  volumeProfile,
   zoneStats,
-} from "./analysis.js?v=2";
+} from "./analysis.js?v=3";
 import {
   CATEGORIES,
   assetSource,
@@ -14,10 +15,11 @@ import {
   TIMEFRAMES,
   snapshot,
   stream,
+  positioning,
   spotGold,
   tape,
   universe,
-} from "./feed.js?v=2";
+} from "./feed.js?v=3";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const el = (id) => document.getElementById(id);
@@ -80,6 +82,7 @@ const state = {
   flowBars: 0,
   lag: 0,
   spot: 0,
+  pos: null,
   statusLabel: "",
 };
 
@@ -96,6 +99,7 @@ let socket = null;
 let poller = null;
 let lastAnalysis = 0;
 let lastPaint = 0;
+let lastDeep = 0;
 const sig = {}; // last markup written per block, so we only rewrite on change
 
 // ---------------------------------------------------------------- operação
@@ -575,6 +579,7 @@ function start() {
   openSocket();
   pull();
   pullSpot();
+  pullDeep();
   const ritmo = socket.live
     ? POLL_STREAM
     : assetSource(state.symbol) === "futures"
@@ -631,6 +636,12 @@ function manageTrade(result, candles, fechou) {
       return state.aberta;
     }
     state.ultima = { ...state.aberta, resultado: fim };
+    historico.add({
+      ...state.ultima,
+      symbol: state.symbol,
+      timeframe: state.timeframe,
+      fechamento: Date.now(),
+    });
     state.aberta = null;
     trade.save(null);
     return null;
@@ -673,6 +684,16 @@ function loop(now) {
   if (now - lastPaint < PAINT_MS) return;
   lastPaint = now;
   paint();
+
+  if (now - lastDeep >= DEEP_MS / 30) {
+    lastDeep = now;
+    const all = state.data.candles;
+    const count = Math.min(state.view.count, all.length);
+    const end = all.length - Math.min(state.view.offset, all.length - count);
+    if (state.analysis) {
+      paintDeep(all.slice(Math.max(0, end - count), end), shown.price, state.analysis);
+    }
+  }
 }
 
 function recompute() {
@@ -1236,12 +1257,411 @@ function drawPills(result, aberta, y, g) {
   swap(R.pills, "pills", parts.join(""));
 }
 
+// ---------------------------------------------------------------- profundidade
+const DEEP_MS = 30000;
+
+/**
+ * Closed operations, kept across sessions.
+ *
+ * A panel that suggests entries and forgets them can never be judged. Every
+ * finished trade lands here with what it was worth in R, so the scoreboard is
+ * a record rather than an impression.
+ */
+const historico = {
+  chave: "painel:historico",
+
+  load() {
+    try {
+      return JSON.parse(localStorage.getItem(historico.chave) || "[]");
+    } catch {
+      return [];
+    }
+  },
+
+  add(t) {
+    const lista = historico.load();
+    lista.push(t);
+    if (lista.length > 300) lista.splice(0, lista.length - 300);
+    try {
+      localStorage.setItem(historico.chave, JSON.stringify(lista));
+    } catch {
+      /* memory only */
+    }
+    return lista;
+  },
+};
+
+async function pullDeep() {
+  try {
+    state.pos = await positioning(state.symbol);
+  } catch {
+    state.pos = null; // no positioning is better than stale positioning
+  }
+}
+
+function mountDeep() {
+  el("deep").innerHTML = `
+    <div class="deep-head">
+      <span class="deep-title">DETALHE</span>
+      <span class="muted">posicionamento, volume por preço, histórico e sessão</span>
+    </div>
+
+    <div class="deep-grid">
+      <div class="card deep-card" id="cardPos">
+        <div class="plan-head">
+          <span class="lbl">FLUXO &amp; POSICIONAMENTO</span>
+          <span class="muted" id="posSym">—</span>
+        </div>
+        <div id="posBody" class="deep-body"></div>
+      </div>
+
+      <div class="card deep-card" id="cardPerfil">
+        <div class="plan-head">
+          <span class="lbl">PERFIL DE VOLUME</span>
+          <span class="muted" id="perfilInfo">—</span>
+        </div>
+        <div id="perfilBody" class="deep-body"></div>
+      </div>
+
+      <div class="card deep-card" id="cardPlacar">
+        <div class="plan-head">
+          <span class="lbl">PLACAR DAS OPERAÇÕES</span>
+          <span class="muted" id="placarInfo">—</span>
+        </div>
+        <div id="placarBody" class="deep-body"></div>
+      </div>
+
+      <div class="card deep-card" id="cardSessao">
+        <div class="plan-head">
+          <span class="lbl">SESSÃO</span>
+          <span class="muted" id="sessaoInfo">—</span>
+        </div>
+        <div id="sessaoBody" class="deep-body"></div>
+      </div>
+    </div>`;
+
+  ["posSym", "posBody", "perfilInfo", "perfilBody", "placarInfo", "placarBody",
+   "sessaoInfo", "sessaoBody"].forEach((id) => (R[id] = el(id)));
+}
+
+/** A line chart small enough to read as a shape rather than a chart. */
+function sparkline(valores, cor, altura = 34) {
+  if (!valores || valores.length < 2) return `<div class="spark-vazio">sem série</div>`;
+
+  const lo = Math.min(...valores);
+  const hi = Math.max(...valores);
+  const faixa = hi - lo || 1;
+  const L = 160;
+  const passo = L / (valores.length - 1);
+
+  let d = "";
+  valores.forEach((v, i) => {
+    const x = (i * passo).toFixed(1);
+    const y = (altura - 3 - ((v - lo) / faixa) * (altura - 6)).toFixed(1);
+    d += `${i ? "L" : "M"}${x} ${y} `;
+  });
+
+  const area = `${d}L${L} ${altura} L0 ${altura} Z`;
+  return `<svg class="spark" viewBox="0 0 ${L} ${altura}" preserveAspectRatio="none">
+    <path d="${area}" fill="${cor}" opacity="0.12"/>
+    <path d="${d}" fill="none" stroke="${cor}" stroke-width="1.5" class="spark-linha"/>
+  </svg>`;
+}
+
+/** Two sides of a crowd, as one bar. */
+function barraLados(compradas, vendidas, rotulo) {
+  const pc = Math.round(compradas * 100);
+  return `<div class="lado">
+    <div class="lado-topo"><span>${rotulo}</span>
+      <span><b style="color:${UP}">${pc}%</b> / <b style="color:${DOWN}">${100 - pc}%</b></span></div>
+    <div class="lado-barra">
+      <div class="lado-compra" style="width:${pc}%"></div>
+      <div class="lado-venda" style="width:${100 - pc}%"></div>
+    </div>
+  </div>`;
+}
+
+function renderPos() {
+  const p = state.pos;
+
+  if (!p) {
+    R.posSym.textContent = "—";
+    swap(R.posBody, "pos", `<div class="vazio">Este ativo não tem contrato perpétuo na
+      Binance, então não há funding, open interest nem posicionamento para mostrar.</div>`);
+    return;
+  }
+
+  R.posSym.textContent = p.simbolo;
+
+  const anual = p.funding != null ? p.funding * 3 * 365 * 100 : null;
+  const corF = p.funding >= 0 ? UP : DOWN;
+  const faltam = p.proximoFunding ? p.proximoFunding - Date.now() : 0;
+
+  const oiVals = p.oi.map((o) => o.valor);
+  const oiAtual = oiVals[oiVals.length - 1] || 0;
+  const oiAntes = oiVals[0] || oiAtual;
+  const oiVar = oiAntes ? ((oiAtual - oiAntes) / oiAntes) * 100 : 0;
+
+  const takerVals = p.taker.map((t) => t.razao);
+  const takerAtual = takerVals[takerVals.length - 1];
+
+  // the reading worth surfacing: when the crowd and the size disagree
+  let divergencia = "";
+  if (p.contas && p.grandes) {
+    const varejo = p.contas.compradas - 0.5;
+    const size = p.grandes.compradas - 0.5;
+    if (varejo * size < 0 && Math.abs(varejo) > 0.03 && Math.abs(size) > 0.03) {
+      const quem = size > 0 ? "grandes comprados" : "grandes vendidos";
+      const outro = varejo > 0 ? "varejo comprado" : "varejo vendido";
+      divergencia = `<div class="diverge" style="border-color:${size > 0 ? UP : DOWN}66">
+        <b style="color:${size > 0 ? UP : DOWN}">DIVERGÊNCIA</b> — ${outro}, ${quem}</div>`;
+    }
+  }
+
+  swap(
+    R.posBody,
+    "pos",
+    `<div class="metricas">
+      <div class="metrica">
+        <span class="m-rot">FUNDING</span>
+        <span class="m-val" style="color:${corF}">${
+          p.funding != null ? `${(p.funding * 100).toFixed(4)}%` : "—"
+        }</span>
+        <span class="m-sub">${anual != null ? `${anual.toFixed(1)}% ao ano` : ""}</span>
+      </div>
+      <div class="metrica">
+        <span class="m-rot">PRÓXIMO EM</span>
+        <span class="m-val" id="fundingConta">${faltam > 0 ? faltam2h(faltam) : "—"}</span>
+        <span class="m-sub">a cada 8 horas</span>
+      </div>
+      <div class="metrica">
+        <span class="m-rot">OPEN INTEREST</span>
+        <span class="m-val">${short(oiAtual)}</span>
+        <span class="m-sub" style="color:${oiVar >= 0 ? UP : DOWN}">${
+          oiVar >= 0 ? "+" : ""
+        }${oiVar.toFixed(2)}% em 4h</span>
+      </div>
+      <div class="metrica">
+        <span class="m-rot">AGRESSÃO TAKER</span>
+        <span class="m-val" style="color:${takerAtual >= 1 ? UP : DOWN}">${
+          takerAtual != null ? takerAtual.toFixed(2) : "—"
+        }</span>
+        <span class="m-sub">compra ÷ venda</span>
+      </div>
+    </div>
+
+    <div class="sparks">
+      <div class="spark-box">
+        <span class="m-rot">OPEN INTEREST · 4h</span>
+        ${sparkline(oiVals, INFO)}
+      </div>
+      <div class="spark-box">
+        <span class="m-rot">RAZÃO TAKER · 4h</span>
+        ${sparkline(takerVals, WARN)}
+      </div>
+    </div>
+
+    ${p.contas ? barraLados(p.contas.compradas, p.contas.vendidas, "Todas as contas") : ""}
+    ${p.grandes ? barraLados(p.grandes.compradas, p.grandes.vendidas, "Maiores posições") : ""}
+    ${divergencia}`
+  );
+}
+
+/** Countdown to the next funding, in hours and minutes. */
+function faltam2h(ms) {
+  const total = Math.max(0, Math.round(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return h ? `${h}h ${String(m).padStart(2, "0")}min` : `${m}min ${String(s).padStart(2, "0")}s`;
+}
+
+function renderPerfil(candles, price) {
+  const vp = volumeProfile(candles);
+
+  if (!vp) {
+    swap(R.perfilBody, "perfil", `<div class="vazio">Poucas barras para montar o perfil.</div>`);
+    return;
+  }
+
+  const poc = vp.bins[vp.poc];
+  R.perfilInfo.textContent = `POC ${fmt((poc.lo + poc.hi) / 2)}`;
+
+  const linhas = [...vp.bins]
+    .reverse()
+    .map((b) => {
+      const dentro = b.lo >= vp.vaBaixo - 1e-9 && b.hi <= vp.vaAlto + 1e-9;
+      const aqui = price >= b.lo && price < b.hi;
+      const ehPoc = b === poc;
+      const largura = (b.vol / vp.max) * 100;
+      const cor = ehPoc ? WARN : dentro ? INFO : "#31403B";
+
+      return `<div class="perfil-linha ${aqui ? "aqui" : ""}">
+        <span class="perfil-preco">${fmt((b.lo + b.hi) / 2)}</span>
+        <div class="perfil-trilho">
+          <div class="perfil-barra" style="width:${largura.toFixed(1)}%;background:${cor}"></div>
+          ${b.delta ? `<span class="perfil-delta" style="color:${b.delta >= 0 ? UP : DOWN}">${
+            b.delta >= 0 ? "+" : "−"
+          }${short(Math.abs(b.delta))}</span>` : ""}
+        </div>
+      </div>`;
+    })
+    .join("");
+
+  swap(
+    R.perfilBody,
+    "perfil",
+    `<div class="perfil">${linhas}</div>
+     <div class="perfil-legenda">
+       <span><i style="background:${WARN}"></i> POC — preço mais negociado</span>
+       <span><i style="background:${INFO}"></i> área de valor (70%) ${fmt(vp.vaBaixo)} a ${fmt(vp.vaAlto)}</span>
+     </div>`
+  );
+}
+
+function renderPlacar() {
+  const todas = historico.load();
+  const doAtivo = todas.filter((t) => t.symbol === state.symbol);
+  const lista = doAtivo.length ? doAtivo : todas;
+
+  R.placarInfo.textContent = doAtivo.length
+    ? `${state.symbol.replace(/^f:/, "")} · ${doAtivo.length}`
+    : `todos · ${todas.length}`;
+
+  if (!lista.length) {
+    swap(
+      R.placarBody,
+      "placar",
+      `<div class="vazio">Nenhuma operação fechada ainda. Assim que uma entrada bater
+       o alvo ou o stop, ela entra aqui com o resultado em R — e o placar passa a
+       dizer se a leitura funciona, em vez de você ter que confiar nela.</div>`
+    );
+    return;
+  }
+
+  const alvos = lista.filter((t) => t.resultado === "alvo").length;
+  const stops = lista.length - alvos;
+  const taxa = (alvos / lista.length) * 100;
+  const rTotal = lista.reduce((a, t) => a + (t.resultado === "alvo" ? t.rr : -1), 0);
+  const corR = rTotal >= 0 ? UP : DOWN;
+
+  const ultimas = lista
+    .slice(-8)
+    .reverse()
+    .map((t) => {
+      const ok = t.resultado === "alvo";
+      const r = ok ? t.rr : -1;
+      return `<div class="hist-linha">
+        <span style="color:${t.side === "compra" ? UP : DOWN}">${t.side === "compra" ? "▲" : "▼"}</span>
+        <span class="hist-sym">${t.symbol.replace(/^f:/, "")} ${t.timeframe}</span>
+        <span class="hist-preco">${fmt(t.entrada, digitsFor(t.entrada))}</span>
+        <span class="hist-res ${ok ? "ganho" : "perda"}">${ok ? "ALVO" : "STOP"}</span>
+        <span class="hist-r" style="color:${ok ? UP : DOWN}">${r >= 0 ? "+" : ""}${r.toFixed(2)}R</span>
+      </div>`;
+    })
+    .join("");
+
+  swap(
+    R.placarBody,
+    "placar",
+    `<div class="metricas">
+      <div class="metrica"><span class="m-rot">OPERAÇÕES</span>
+        <span class="m-val">${lista.length}</span></div>
+      <div class="metrica"><span class="m-rot">ALVO</span>
+        <span class="m-val" style="color:${UP}">${alvos}</span></div>
+      <div class="metrica"><span class="m-rot">STOP</span>
+        <span class="m-val" style="color:${DOWN}">${stops}</span></div>
+      <div class="metrica"><span class="m-rot">RESULTADO</span>
+        <span class="m-val" style="color:${corR}">${rTotal >= 0 ? "+" : ""}${rTotal.toFixed(1)}R</span>
+        <span class="m-sub">acerto ${taxa.toFixed(0)}%</span></div>
+    </div>
+    <div class="hist">${ultimas}</div>
+    <div class="nota">R é o resultado medido no risco da própria operação: +2R significa
+      que ela rendeu duas vezes o que arriscava. Sem taxa e sem deslize.</div>`
+  );
+}
+
+function renderSessao(candles, result) {
+  if (!candles.length) return;
+
+  const alta = Math.max(...candles.map((c) => c.high));
+  const baixa = Math.min(...candles.map((c) => c.low));
+  const amplitude = alta - baixa;
+  const price = candles[candles.length - 1].close;
+  const posicao = amplitude ? ((price - baixa) / amplitude) * 100 : 50;
+
+  const vol = candles.reduce((a, c) => a + (c.volume || 0), 0);
+  const maior = candles.reduce((a, c) => (Math.abs(c.close - c.open) > Math.abs(a.close - a.open) ? c : a));
+
+  // how many bars the market has been pushing the same way
+  let seq = 1;
+  const subindo = candles[candles.length - 1].close >= candles[candles.length - 1].open;
+  for (let i = candles.length - 2; i >= 0; i--) {
+    if (candles[i].close >= candles[i].open === subindo) seq++;
+    else break;
+  }
+
+  const atrPct = price ? (result.atr / price) * 100 : 0;
+  R.sessaoInfo.textContent = `${candles.length} barras · ${state.timeframe}`;
+
+  swap(
+    R.sessaoBody,
+    "sessao",
+    `<div class="metricas">
+      <div class="metrica"><span class="m-rot">MÁXIMA</span>
+        <span class="m-val">${fmt(alta)}</span></div>
+      <div class="metrica"><span class="m-rot">MÍNIMA</span>
+        <span class="m-val">${fmt(baixa)}</span></div>
+      <div class="metrica"><span class="m-rot">AMPLITUDE</span>
+        <span class="m-val">${fmt(amplitude)}</span>
+        <span class="m-sub">${((amplitude / baixa) * 100).toFixed(2)}%</span></div>
+      <div class="metrica"><span class="m-rot">ATR</span>
+        <span class="m-val">${atrPct.toFixed(2)}%</span>
+        <span class="m-sub">${fmt(result.atr)}</span></div>
+    </div>
+
+    <div class="faixa">
+      <div class="faixa-topo"><span>${fmt(baixa)}</span><span>onde está na faixa</span><span>${fmt(alta)}</span></div>
+      <div class="faixa-trilho"><div class="faixa-marca" style="left:${posicao.toFixed(1)}%"></div></div>
+    </div>
+
+    <div class="metricas">
+      <div class="metrica"><span class="m-rot">VOLUME DA JANELA</span>
+        <span class="m-val">${short(vol)}</span></div>
+      <div class="metrica"><span class="m-rot">MAIOR BARRA</span>
+        <span class="m-val" style="color:${maior.close >= maior.open ? UP : DOWN}">${fmt(
+          Math.abs(maior.close - maior.open)
+        )}</span>
+        <span class="m-sub">${new Date(maior.time).toLocaleTimeString("pt-BR", {
+          hour: "2-digit",
+          minute: "2-digit",
+        })}</span></div>
+      <div class="metrica"><span class="m-rot">SEQUÊNCIA</span>
+        <span class="m-val" style="color:${subindo ? UP : DOWN}">${seq}</span>
+        <span class="m-sub">${subindo ? "barras de alta" : "barras de baixa"}</span></div>
+      <div class="metrica"><span class="m-rot">TENDÊNCIA</span>
+        <span class="m-val" style="color:${
+          result.trend === "alta" ? UP : result.trend === "baixa" ? DOWN : NEU
+        }">${result.trend.toUpperCase()}</span></div>
+    </div>`
+  );
+}
+
+function paintDeep(candles, price, result) {
+  renderPos();
+  renderPerfil(candles, price);
+  renderPlacar();
+  renderSessao(candles, result);
+}
+
 // ---------------------------------------------------------------- start
 mount();
+mountDeep();
 buildControls();
 status("", "conectando…");
 start();
 pullTape();
 setInterval(pullTape, 20000);
 setInterval(pullSpot, 30000);
+setInterval(pullDeep, DEEP_MS);
 requestAnimationFrame(loop);

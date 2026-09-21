@@ -204,6 +204,61 @@ export function zoneStats(zones) {
   };
 }
 
+/**
+ * Volume by price.
+ *
+ * A candle's volume is spread across the price bins its range covers, which is
+ * the honest approximation available from candles: the exchange does not say
+ * where inside the bar each lot traded. The busiest bin is the point of
+ * control, and the value area is the band holding seventy percent of it.
+ */
+export function volumeProfile(candles, buckets = 22) {
+  if (candles.length < 2) return null;
+
+  const lo = Math.min(...candles.map((c) => c.low));
+  const hi = Math.max(...candles.map((c) => c.high));
+  const step = (hi - lo) / buckets;
+  if (!(step > 0)) return null;
+
+  const bins = Array.from({ length: buckets }, (_, i) => ({
+    lo: lo + i * step,
+    hi: lo + (i + 1) * step,
+    vol: 0,
+    delta: 0,
+  }));
+
+  for (const c of candles) {
+    const a = Math.max(0, Math.min(buckets - 1, Math.floor((c.low - lo) / step)));
+    const b = Math.max(0, Math.min(buckets - 1, Math.floor((c.high - lo) / step)));
+    const n = b - a + 1;
+    const vol = (c.volume || 0) / n;
+    const delta = (c.delta || 0) / n;
+    for (let i = a; i <= b; i++) {
+      bins[i].vol += vol;
+      bins[i].delta += delta;
+    }
+  }
+
+  const total = bins.reduce((acc, b) => acc + b.vol, 0);
+  let poc = 0;
+  bins.forEach((b, i) => {
+    if (b.vol > bins[poc].vol) poc = i;
+  });
+
+  // grow outward from the busiest bin, always taking the fuller neighbour
+  let baixo = poc;
+  let alto = poc;
+  let acc = bins[poc].vol;
+  while (acc < total * 0.7 && (baixo > 0 || alto < buckets - 1)) {
+    const desce = baixo > 0 ? bins[baixo - 1].vol : -1;
+    const sobe = alto < buckets - 1 ? bins[alto + 1].vol : -1;
+    if (sobe >= desce) acc += bins[++alto].vol;
+    else acc += bins[--baixo].vol;
+  }
+
+  return { bins, poc, vaBaixo: bins[baixo].lo, vaAlto: bins[alto].hi, total, max: bins[poc].vol };
+}
+
 export function analyse(candles, opts = {}) {
   const { depth = 0.5, zoneLimit = 6, flow = null } = opts;
 
