@@ -15,7 +15,7 @@ import {
   varrer,
   volumeProfile,
   zoneStats,
-} from "./analysis.js?v=52";
+} from "./analysis.js?v=53";
 import {
   capacidade,
   choques,
@@ -29,7 +29,7 @@ import {
   riscoDaCarteira,
   tendenciaCorrelacao,
   volTermo,
-} from "./mesa.js?v=52";
+} from "./mesa.js?v=53";
 import {
   CATEGORIES,
   JANELA,
@@ -44,7 +44,7 @@ import {
   spotGold,
   tape,
   universe,
-} from "./feed.js?v=52";
+} from "./feed.js?v=53";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const el = (id) => document.getElementById(id);
@@ -440,11 +440,27 @@ function bindGestures() {
     clampView();
   });
 
+  /**
+   * The wheel zooms the chart, the way every chart does.
+   *
+   * It used to require the control key, which nobody guesses and nothing on the
+   * screen said — so on a desktop the wheel simply did nothing over the chart.
+   * Now it zooms around wherever the cursor is, and holding shift slides the
+   * window sideways instead, which is the other thing a hand on a chart wants.
+   */
   wrap.addEventListener(
     "wheel",
     (e) => {
-      if (!total() || !e.ctrlKey) return;
+      if (!total()) return;
       e.preventDefault();
+
+      if (e.shiftKey) {
+        const passo = Math.max(1, Math.round(state.view.count * 0.12));
+        state.view.offset += e.deltaY > 0 ? -passo : passo;
+        clampView();
+        return;
+      }
+
       const r = wrap.getBoundingClientRect();
       const anchor = (e.clientX - r.left) / r.width;
       const before = state.view.count;
@@ -3634,12 +3650,13 @@ async function medirFamilia() {
       zoneLimit: state.zones,
     };
 
-    await respirar();
-    const primeira = testarFamilia(velas.slice(0, corte), state.familia, opts);
-    await respirar();
-    const segunda = testarFamilia(velas.slice(corte - JANELA), state.familia, opts);
-    await respirar();
-    const tudo = testarFamilia(velas, state.familia, opts);
+    const naOficina = (fatia) =>
+      medir("familia", { velas: fatia, familia: state.familia, opts },
+        () => testarFamilia(fatia, state.familia, opts));
+
+    const primeira = await naOficina(velas.slice(0, corte));
+    const segunda = await naOficina(velas.slice(corte - JANELA));
+    const tudo = await naOficina(velas);
 
     state.lab = {
       familia: state.familia,
@@ -3794,13 +3811,15 @@ async function medirComite() {
     const velas = await history(state.symbol, state.timeframe, 3000);
     if (chave !== `${state.symbol}:${state.timeframe}`) return;
 
-    const ficha = fichaComite(velas || [], {
+    const optsFicha = {
       janela: JANELA,
       taxa: taxaAtual(),
       flowBars: FLOW_BARS[state.timeframe] || 12,
       depth: state.depth,
       zoneLimit: state.zones,
-    });
+    };
+    const ficha = await medir("ficha", { velas: velas || [], opts: optsFicha },
+      () => fichaComite(velas || [], optsFicha));
     await respirar();
 
     state.comite = ficha.curto
@@ -3905,7 +3924,8 @@ async function mapear() {
       try {
         const velas = await history(state.symbol, tf, 2500);
         if (!velas || velas.length - JANELA < 300) { linhas.push({ tf, curto: true }); continue; }
-        const bt = backtest(velas, { flowBars: FLOW_BARS[tf] || 12, janela: JANELA, taxa: taxaAtual() });
+        const opts = { flowBars: FLOW_BARS[tf] || 12, janela: JANELA, taxa: taxaAtual() };
+        const bt = await medir("backtest", { velas, opts }, () => backtest(velas, opts));
         linhas.push(bt && bt.total >= 5
           ? { tf, ops: bt.total, porOp: bt.porOp, acerto: bt.taxa, folga: bt.taxa - bt.acertoNecessario }
           : { tf, poucas: true });
@@ -3975,6 +3995,73 @@ function renderMapa() {
       escolhida e entrada na abertura da barra seguinte ao sinal. ★ é o que mais rendeu.</div>
     <button class="btn largo" id="mapaBotao">medir de novo</button>`);
   el("mapaBotao")?.addEventListener("click", mapear);
+}
+
+// ------------------------------------------------------------------ oficina
+/**
+ * The measurement thread, and the promise-shaped door to it.
+ *
+ * Every heavy figure in this panel is arithmetic over thousands of bars, and
+ * it used to run here — on the thread that draws the chart and answers the
+ * mouse. One backtest over 2500 candles costs about 750ms, the asset map runs
+ * five and the Monte Carlo grid sixty, so the page sat frozen for seconds at a
+ * time: clicks queued up, the wheel did nothing, the chart stopped moving.
+ *
+ * Now the numbers are worked out on their own thread and only the answers come
+ * back. If the worker cannot start — an old browser, a file blocked — the
+ * calculation falls back to running here, slowly but correctly, rather than
+ * the screen simply staying empty.
+ */
+const oficina = (() => {
+  let fio = null;
+  let proximo = 0;
+  const pendentes = new Map();
+
+  const abrir = () => {
+    if (fio !== null) return fio;
+    try {
+      fio = new Worker("./trabalho.js?v=53", { type: "module" });
+      fio.onmessage = (e) => {
+        const { id, resultado, erro } = e.data || {};
+        const pedido = pendentes.get(id);
+        if (!pedido) return;
+        pendentes.delete(id);
+        erro ? pedido.falhou(new Error(erro)) : pedido.ok(resultado);
+      };
+      fio.onerror = () => {
+        for (const { falhou } of pendentes.values()) falhou(new Error("oficina caiu"));
+        pendentes.clear();
+        fio = false; // não tenta de novo; daqui em diante é na mão
+      };
+    } catch {
+      fio = false;
+    }
+    return fio;
+  };
+
+  return {
+    disponivel: () => abrir() !== false,
+    pedir(tarefa, dados) {
+      const t = abrir();
+      if (t === false) return Promise.reject(new Error("sem oficina"));
+      const id = ++proximo;
+      return new Promise((ok, falhou) => {
+        pendentes.set(id, { ok, falhou });
+        t.postMessage({ id, tarefa, dados });
+      });
+    },
+  };
+})();
+
+/** Runs in the worker when there is one, here when there is not. */
+async function medir(tarefa, dados, naMao) {
+  try {
+    if (oficina.disponivel()) return await oficina.pedir(tarefa, dados);
+  } catch {
+    /* cai para o caminho da mão */
+  }
+  await respirar();
+  return naMao();
 }
 
 // ------------------------------------------------------------ tela inicial
@@ -4381,13 +4468,14 @@ async function rodarMonte() {
         try {
           const velas = await history(id, tf, 2500);
           if (!velas || velas.length - JANELA < 300) { state.monte.celulas[chave] = null; continue; }
-          const bt = backtest(velas, { flowBars: FLOW_BARS[tf] || 12, janela: JANELA, taxa: taxaAtual() });
-          const rs = resultadosDe(bt);
-          if (!rs || rs.length < 8) { state.monte.celulas[chave] = null; continue; }
-          const mc = monteCarlo(rs, { caminhos: 1500 });
-          state.monte.celulas[chave] = mc
-            ? { ...mc, porOp: bt.porOp, leque: leque(rs, { caminhos: 800 }) }
-            : null;
+          const opts = { flowBars: FLOW_BARS[tf] || 12, janela: JANELA, taxa: taxaAtual() };
+          state.monte.celulas[chave] = await medir("celula", { velas, opts }, () => {
+            const bt = backtest(velas, opts);
+            const rs = resultadosDe(bt);
+            if (!rs || rs.length < 8) return null;
+            const mc = monteCarlo(rs, { caminhos: 1500 });
+            return mc ? { ...mc, porOp: bt.porOp, leque: leque(rs, { caminhos: 800 }) } : null;
+          });
         } catch {
           state.monte.celulas[chave] = null;
         }
@@ -4593,7 +4681,8 @@ async function medirCapacidade() {
     }
     if (!velas) { state.cap = { erro: "Histórico indisponível." }; return; }
 
-    const bt = backtest(velas, { flowBars: FLOW_BARS[state.timeframe] || 12, janela: JANELA, taxa: taxaAtual() });
+    const optsBt = { flowBars: FLOW_BARS[state.timeframe] || 12, janela: JANELA, taxa: taxaAtual() };
+    const bt = await medir("backtest", { velas, opts: optsBt }, () => backtest(velas, optsBt));
     const a = (state.analysis && state.analysis.atr) || 0;
     const preco = +livro.asks[0][0];
     const stopPct = preco > 0 ? a / preco : 0;
