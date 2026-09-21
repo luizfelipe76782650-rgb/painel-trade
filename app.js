@@ -15,7 +15,7 @@ import {
   varrer,
   volumeProfile,
   zoneStats,
-} from "./analysis.js?v=45";
+} from "./analysis.js?v=46";
 import {
   capacidade,
   choques,
@@ -29,7 +29,7 @@ import {
   riscoDaCarteira,
   tendenciaCorrelacao,
   volTermo,
-} from "./mesa.js?v=45";
+} from "./mesa.js?v=46";
 import {
   CATEGORIES,
   JANELA,
@@ -44,7 +44,7 @@ import {
   spotGold,
   tape,
   universe,
-} from "./feed.js?v=45";
+} from "./feed.js?v=46";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const el = (id) => document.getElementById(id);
@@ -1235,7 +1235,10 @@ function drawChart(result, candles, price, aberta) {
   for (let i = 0; i <= g.ticks; i++) {
     const value = hi - ((hi - lo) / g.ticks) * i;
     const yy = y(value);
-    add("line", { x1: 0, x2: right, y1: yy, y2: yy, stroke: "#18211E", "stroke-width": 1 });
+    add("line", {
+      x1: 0, x2: right, y1: yy, y2: yy,
+      stroke: "#18211E", "stroke-width": 1, "shape-rendering": "crispEdges",
+    });
     add("text", { x: g.W - 4, y: yy + 3, fill: NEU, "text-anchor": "end", ...mono }, fmt(value));
   }
 
@@ -1353,7 +1356,10 @@ function drawChart(result, candles, price, aberta) {
   }
 
   // delta por barra e CVD
-  add("line", { x1: 0, x2: g.W, y1: g.sep, y2: g.sep, stroke: "#1E2724", "stroke-width": 1 });
+  add("line", {
+    x1: 0, x2: g.W, y1: g.sep, y2: g.sep,
+    stroke: "#1E2724", "stroke-width": 1, "shape-rendering": "crispEdges",
+  });
   add("line", { x1: 0, x2: right, y1: g.dMid, y2: g.dMid, stroke: "#25302C", "stroke-width": 1 });
 
   if (candles.some((c) => typeof c.delta === "number")) {
@@ -1686,9 +1692,18 @@ function sparkline(valores, cor, altura = 34) {
   });
 
   const area = `${d}L${L} ${altura} L0 ${altura} Z`;
+
+  /**
+   * The drawing is stretched to whatever width the card is, and a stroke
+   * stretches with it — on a 300px card a 160-unit viewBox widens by nearly
+   * two, so a 1.5px line becomes 2.9px across and 1.5px down. The eye reads
+   * that unevenness as blur. non-scaling-stroke keeps the pen the same width
+   * in real pixels however far the geometry is pulled.
+   */
   return `<svg class="spark" viewBox="0 0 ${L} ${altura}" preserveAspectRatio="none">
     <path d="${area}" fill="${cor}" opacity="0.12"/>
-    <path d="${d}" fill="none" stroke="${cor}" stroke-width="1.5" class="spark-linha"/>
+    <path d="${d}" fill="none" stroke="${cor}" stroke-width="1.5"
+      vector-effect="non-scaling-stroke" class="spark-linha"/>
   </svg>`;
 }
 
@@ -2844,7 +2859,9 @@ function lerFoto(arquivo) {
       const img = new Image();
       img.onerror = () => falha(new Error("arquivo não é uma imagem"));
       img.onload = () => {
-        const lado = 160;
+        // a tela do celular tem dois ou três pixels reais para cada pixel de
+        // CSS; gravar em 160 era gravar metade do que a tela mostra
+        const lado = 160 * Math.min(3, Math.max(1, Math.round(window.devicePixelRatio || 1)));
         const tela = document.createElement("canvas");
         tela.width = lado;
         tela.height = lado;
@@ -4164,7 +4181,8 @@ function desenharHero(entrando) {
     </defs>
     <path class="hero-area" d="${area}" fill="url(#heroFill)"/>
     <path class="hero-linha" d="${linha}" fill="none" stroke="${cor}" stroke-width="2"
-      stroke-linecap="round" stroke-linejoin="round" filter="url(#heroGlow)"/>
+      stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"
+      filter="url(#heroGlow)"/>
     <circle class="hero-halo" cx="${fx.toFixed(1)}" cy="${fy.toFixed(1)}" r="4" fill="${cor}"/>
     <circle cx="${fx.toFixed(1)}" cy="${fy.toFixed(1)}" r="2.6" fill="${cor}"/>`;
 
@@ -4447,10 +4465,14 @@ function renderMonte() {
       '<svg class="leque" viewBox="0 0 ' + L + " " + A + '" preserveAspectRatio="none">' +
       '<path d="' + area + '" fill="#14b8a6" opacity="0.14"/>' +
       '<line x1="0" y1="' + y(0) + '" x2="' + L + '" y2="' + y(0) +
-        '" stroke="var(--dim)" stroke-width="1" stroke-dasharray="3 4"/>' +
-      '<path d="' + linha(lq.baixo) + '" fill="none" stroke="' + DOWN + '" stroke-width="1.4"/>' +
-      '<path d="' + linha(lq.alto) + '" fill="none" stroke="' + UP + '" stroke-width="1.4"/>' +
-      '<path d="' + linha(lq.meio) + '" fill="none" stroke="#14b8a6" stroke-width="2"/>' +
+        '" stroke="var(--dim)" stroke-width="1" stroke-dasharray="3 4" ' +
+        'vector-effect="non-scaling-stroke" shape-rendering="crispEdges"/>' +
+      '<path d="' + linha(lq.baixo) + '" fill="none" stroke="' + DOWN +
+        '" stroke-width="1.4" vector-effect="non-scaling-stroke"/>' +
+      '<path d="' + linha(lq.alto) + '" fill="none" stroke="' + UP +
+        '" stroke-width="1.4" vector-effect="non-scaling-stroke"/>' +
+      '<path d="' + linha(lq.meio) + '" fill="none" stroke="#14b8a6" stroke-width="2" ' +
+        'vector-effect="non-scaling-stroke"/>' +
       "</svg>" +
       '<div class="leque-pes"><span style="color:' + DOWN + '">pior 5%</span>' +
       '<span style="color:#14b8a6">típico</span>' +

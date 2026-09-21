@@ -3702,3 +3702,73 @@ button {
   .deep-grid { column-gap: 16px; }
   .deep-card { margin-bottom: 16px; }
 }
+
+/* ======================================================================
+   NITIDEZ
+   ======================================================================
+   Nothing here is a bitmap, so softness does not come from resolution — it
+   comes from how the glyphs and the strokes land on the screen's pixels.
+
+   The default smoothing thins strokes to fake extra resolution, which on a
+   dark ground eats the stems of small letters and reads as a smudge; asking
+   for the full grayscale weight puts them back. geometricPrecision stops the
+   renderer from rounding letter positions to whole pixels, which is what makes
+   spacing look uneven in a line of numbers. */
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+.m-val,
+.v,
+.hero-valor,
+.sent-num,
+.mc-cel,
+.cap-usd,
+.cap-sobra,
+.carrega-val,
+.choque-resumo-val,
+.book-row,
+.tile .v {
+  text-rendering: geometricPrecision;
+  font-feature-settings: "tnum" 1, "zero" 1;
+}
+
+/* a hairline drawn on a whole coordinate falls between two screen pixels and
+   comes out as two grey ones; snapping it puts the line back on one */
+.spark,
+.leque,
+.hero-svg {
+  shape-rendering: auto;
+}
+
+.dist-barra,
+.hora-barra,
+.pf-c,
+.pf-v,
+.carrega-fill,
+.lado-fill,
+.mapa-fill {
+  will-change: auto;
+  backface-visibility: hidden;
+}
+
+/* thin borders on a dark ground disappear into the background at some zoom
+   levels; a touch more contrast keeps the panels separated */
+.deep-card .card,
+.metrica,
+.cap-linha,
+.sent-linha,
+.choque-linha {
+  border: 1px solid transparent;
+}
+
+@media (min-width: 1100px) {
+  .metrica,
+  .cap-linha,
+  .sent-linha,
+  .choque-linha {
+    border-color: var(--line-soft);
+  }
+}
