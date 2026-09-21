@@ -1589,6 +1589,10 @@ button {
   z-index: 41;
   overflow: hidden;
   animation: sobe 0.25s ease both;
+  /* a drag inside the bubble used to chain through to the page and pan the
+     chart behind it; the bubble keeps its own gestures */
+  overscroll-behavior: contain;
+  touch-action: none;
 }
 
 .balao-topo,
@@ -1629,6 +1633,8 @@ button {
   flex-direction: column;
   gap: 8px;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
 }
 
 .balao-leitura p {
@@ -1644,6 +1650,8 @@ button {
 
 .balao-lista {
   overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
   padding: 6px 12px 10px;
   display: flex;
   flex-direction: column;
@@ -1709,11 +1717,11 @@ button {
   position: fixed;
   right: 96px;
   bottom: calc(30px + env(safe-area-inset-bottom, 0px));
-  max-width: min(320px, calc(100vw - 120px));
+  max-width: min(340px, calc(100vw - 120px));
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 7px 11px;
+  gap: 4px;
+  padding: 5px 11px 5px 5px;
   border-radius: 16px;
   border: 1px solid var(--line);
   background: var(--panel);
@@ -1724,6 +1732,7 @@ button {
   white-space: nowrap;
   z-index: 39;
   animation: sobe 0.3s ease both;
+  touch-action: none;
 }
 
 .dica.compra {
@@ -1736,6 +1745,38 @@ button {
 
 .dica.quieta {
   opacity: 0.55;
+}
+
+.dica-x {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--dim);
+  font-size: 15px;
+  line-height: 1;
+  padding: 0;
+}
+
+.dica-x:hover,
+.dica-x:focus-visible {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.dica-corpo {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  white-space: nowrap;
 }
 
 .dica-tf {
@@ -1777,8 +1818,13 @@ button {
     bottom: calc(24px + env(safe-area-inset-bottom, 0px));
     max-width: calc(100vw - 100px);
     font-size: 10px;
-    padding: 6px 9px;
+    padding: 4px 9px 4px 4px;
+    gap: 3px;
+  }
+
+  .dica-corpo {
     gap: 5px;
+    overflow: hidden;
   }
 
   .dica-tempo {

@@ -8,7 +8,7 @@ import {
   varrer,
   volumeProfile,
   zoneStats,
-} from "./analysis.js?v=8";
+} from "./analysis.js?v=9";
 import {
   CATEGORIES,
   assetSource,
@@ -22,7 +22,7 @@ import {
   spotGold,
   tape,
   universe,
-} from "./feed.js?v=8";
+} from "./feed.js?v=9";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const el = (id) => document.getElementById(id);
@@ -88,6 +88,7 @@ const state = {
   pos: null,
   scan: null,
   escaneando: false,
+  dicaFechada: null,
   hist: null,
   bt: null,
   btErro: null,
@@ -477,6 +478,7 @@ function reload() {
   state.analysis = null;
   shown.price = 0;
   state.scan = null;
+  state.dicaFechada = null;
   start();
   rodarBacktest();
   escanear();
@@ -2226,13 +2228,27 @@ function curto(ms) {
 
 let dicaAnterior = "";
 
+/** What the hint is currently about, so a dismissal applies to that and not
+ * to every future finding. */
+function chaveDaDica(scan) {
+  const a = scan.achados[0];
+  return a ? `${a.tf}:${a.side}:${a.fecha}` : "vazio";
+}
+
 function pintarDica() {
-  const d = el("dica");
-  if (!d) return;
+  const caixa = el("dica");
+  const corpo = el("dicaCorpo");
+  if (!caixa || !corpo) return;
 
   const scan = state.scan;
   if (!scan) {
-    d.hidden = true;
+    caixa.hidden = true;
+    return;
+  }
+
+  const chave = chaveDaDica(scan);
+  if (chave === state.dicaFechada) {
+    caixa.hidden = true;
     return;
   }
 
@@ -2259,11 +2275,18 @@ function pintarDica() {
   }
 
   if (html !== dicaAnterior) {
-    d.innerHTML = html;
+    corpo.innerHTML = html;
     dicaAnterior = html;
   }
-  d.className = classe;
-  d.hidden = false;
+  caixa.className = classe;
+  caixa.hidden = false;
+}
+
+/** Dismisses this finding only; the next different one shows again. */
+function dispensarDica(e) {
+  e.stopPropagation();
+  if (state.scan) state.dicaFechada = chaveDaDica(state.scan);
+  el("dica").hidden = true;
 }
 
 /** Tapping the hint takes the panel to the timeframe that found something. */
@@ -2343,7 +2366,8 @@ function abrirBalao() {
 
 function ligarMascote() {
   el("mascote")?.addEventListener("click", abrirBalao);
-  el("dica")?.addEventListener("click", irParaAchado);
+  el("dicaCorpo")?.addEventListener("click", irParaAchado);
+  el("dicaX")?.addEventListener("click", dispensarDica);
   el("balaoFechar")?.addEventListener("click", () => (el("balao").hidden = true));
 
   document.addEventListener("click", (e) => {

@@ -21,7 +21,7 @@
     <link rel="apple-touch-icon" href="./icone.svg" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <link rel="stylesheet" href="./style.css?v=8" />
+    <link rel="stylesheet" href="./style.css?v=9" />
   </head>
   <body>
     <div class="app">
@@ -101,7 +101,10 @@
       <span class="mascote-selo" id="mascoteSelo" hidden>0</span>
     </button>
 
-    <button class="dica" id="dica" type="button" hidden></button>
+    <div class="dica" id="dica" hidden>
+      <button class="dica-x" id="dicaX" type="button" aria-label="Dispensar">×</button>
+      <button class="dica-corpo" id="dicaCorpo" type="button"></button>
+    </div>
 
     <div class="balao" id="balao" hidden>
       <div class="balao-topo">
@@ -113,6 +116,6 @@
       <div class="balao-lista" id="balaoLista"></div>
     </div>
 
-    <script type="module" src="./app.js?v=8"></script>
+    <script type="module" src="./app.js?v=9"></script>
   </body>
 </html>
