@@ -1391,13 +1391,23 @@ button {
 }
 
 /* ---------- mascote ---------- */
-@keyframes flutua {
+@keyframes floatY {
   0%,
   100% {
     transform: translateY(0);
   }
   50% {
-    transform: translateY(-5px);
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes pulseBorder {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(20, 184, 166, 0.5), 0 6px 20px rgba(0, 0, 0, 0.45);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(20, 184, 166, 0), 0 6px 20px rgba(0, 0, 0, 0.45);
   }
 }
 
@@ -1407,31 +1417,40 @@ button {
   bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   width: 72px;
   height: 72px;
-  padding: 0;
+  padding: 2px;
+  border: 0;
   border-radius: 50%;
-  border: 2px solid #14b8a6;
-  background: var(--panel);
-  overflow: hidden;
+  background: #14b8a6;
   z-index: 40;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
-  animation: flutua 4s ease-in-out infinite;
-  transition: transform 0.2s ease;
+  animation: pulseBorder 2.4s ease-in-out infinite, floatY 3.2s ease-in-out infinite;
 }
 
-.mascote:hover,
-.mascote:focus-visible {
-  transform: scale(1.06);
+.mascote-corpo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #0f0f0f;
 }
 
 .mascote img {
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  display: block;
+  transform: scale(1.18);
+  transition: transform 0.25s ease;
+}
+
+/* the float already owns the outer transform, so the hover lives on the art */
+.mascote:hover img,
+.mascote:focus-visible img {
+  transform: scale(1.3);
 }
 
 /* enquanto a imagem não chega */
-.mascote.vazio::after {
+.mascote.vazio .mascote-corpo::after {
   content: "?";
   font-family: "Space Grotesk", sans-serif;
   font-size: 26px;

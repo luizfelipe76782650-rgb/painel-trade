@@ -8,7 +8,7 @@ import {
   varrer,
   volumeProfile,
   zoneStats,
-} from "./analysis.js?v=4";
+} from "./analysis.js?v=5";
 import {
   CATEGORIES,
   assetSource,
@@ -22,7 +22,7 @@ import {
   spotGold,
   tape,
   universe,
-} from "./feed.js?v=4";
+} from "./feed.js?v=5";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const el = (id) => document.getElementById(id);

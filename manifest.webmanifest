@@ -1,0 +1,19 @@
+{
+  "name": "Painel de Trading",
+  "short_name": "Painel",
+  "description": "Leitura de mercado ao vivo: zonas, agressão, livro e plano de operação.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0a0d0c",
+  "theme_color": "#0a0d0c",
+  "icons": [
+    {
+      "src": "icone.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
