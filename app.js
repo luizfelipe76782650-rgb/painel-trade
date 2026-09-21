@@ -5,7 +5,7 @@ import {
   sma,
   cvdSeries,
   zoneStats,
-} from "./analysis.js";
+} from "./analysis.js?v=2";
 import {
   CATEGORIES,
   assetSource,
@@ -17,7 +17,7 @@ import {
   spotGold,
   tape,
   universe,
-} from "./feed.js";
+} from "./feed.js?v=2";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const el = (id) => document.getElementById(id);
