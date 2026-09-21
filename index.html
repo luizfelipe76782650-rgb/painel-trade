@@ -15,7 +15,13 @@
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
     />
-    <link rel="stylesheet" href="./style.css?v=3" />
+    <meta name="theme-color" content="#0a0d0c" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icone.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icone.svg" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="stylesheet" href="./style.css?v=4" />
   </head>
   <body>
     <div class="app">
@@ -88,6 +94,10 @@
       <section class="deep" id="deep"></section>
     </div>
 
-    <script type="module" src="./app.js?v=3"></script>
+    <button class="mascote" id="mascote" type="button" aria-label="Mascote">
+      <img src="./mascote.png" alt="" id="mascoteImg" />
+    </button>
+
+    <script type="module" src="./app.js?v=4"></script>
   </body>
 </html>

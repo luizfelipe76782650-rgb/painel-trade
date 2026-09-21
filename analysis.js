@@ -399,3 +399,92 @@ export function buildPlan(price, a, score, sup, res, zones = []) {
     rr,
   };
 }
+
+/**
+ * Walks the strategy forward over history, one closed bar at a time.
+ *
+ * Only bars the analysis could actually have seen are passed in, and while a
+ * trade is open no new one is considered — the same rule the live panel obeys.
+ * What comes back is a record of what this reading would have done, measured
+ * in R: the result divided by what the trade risked.
+ *
+ * It is a simple simulation. No fee, no slippage, and the target and stop are
+ * assumed to fill at the level. Treat it as calibration, not proof.
+ */
+export function backtest(candles, opts = {}) {
+  const { depth = 0.5, zoneLimit = 6, flowBars = 18, warmup = 200 } = opts;
+
+  if (candles.length < warmup + 40) return null;
+
+  const operacoes = [];
+  const curva = [];
+  let aberta = null;
+  let r = 0;
+
+  for (let i = warmup; i < candles.length; i++) {
+    const barra = candles[i - 1];
+
+    if (aberta) {
+      const parou =
+        aberta.side === "compra" ? barra.low <= aberta.stop : barra.high >= aberta.stop;
+      const chegou =
+        aberta.side === "compra" ? barra.high >= aberta.alvo : barra.low <= aberta.alvo;
+
+      // a bar that touches both is counted as a loss: without tick data there
+      // is no way to know which came first, and assuming the win flatters it
+      if (parou || chegou) {
+        const ganhou = chegou && !parou;
+        r += ganhou ? aberta.rr : -1;
+        operacoes.push({ ...aberta, resultado: ganhou ? "alvo" : "stop", fim: barra.time });
+        curva.push(r);
+        aberta = null;
+      }
+      continue;
+    }
+
+    const janela = candles.slice(0, i);
+    const flow = flowFromCandles(janela, flowBars);
+    const res = analyse(janela, {
+      depth,
+      zoneLimit,
+      flow: flow ? { ...flow, total: flow.buy + flow.sell } : null,
+    });
+
+    if (res.plan && res.plan.side !== "fora") aberta = { ...res.plan, inicio: barra.time };
+  }
+
+  const alvos = operacoes.filter((o) => o.resultado === "alvo").length;
+
+  return {
+    operacoes,
+    curva,
+    total: operacoes.length,
+    alvos,
+    stops: operacoes.length - alvos,
+    taxa: operacoes.length ? (alvos / operacoes.length) * 100 : 0,
+    r,
+    barras: candles.length - warmup,
+  };
+}
+
+/**
+ * Sweeps the two controls the panel exposes and reports what each pairing
+ * would have returned, so the sliders can be set from evidence.
+ */
+export function varrer(candles, flowBars, zonas = [0.2, 0.4, 0.6, 0.8, 1.2, 1.6], niveis = [3, 4, 6, 8, 10]) {
+  const grade = [];
+  let melhor = null;
+
+  for (const depth of zonas) {
+    const linha = [];
+    for (const zoneLimit of niveis) {
+      const bt = backtest(candles, { depth, zoneLimit, flowBars });
+      const cel = bt ? { depth, zoneLimit, r: bt.r, total: bt.total, taxa: bt.taxa } : null;
+      linha.push(cel);
+      if (cel && cel.total >= 3 && (!melhor || cel.r > melhor.r)) melhor = cel;
+    }
+    grade.push(linha);
+  }
+
+  return { grade, zonas, niveis, melhor };
+}

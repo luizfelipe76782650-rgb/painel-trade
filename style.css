@@ -1262,3 +1262,204 @@ button {
     width: 62px;
   }
 }
+
+/* ---------- medição e varredura ---------- */
+.btn.largo {
+  width: 100%;
+  height: 30px;
+}
+
+.btn.mini-btn {
+  height: 22px;
+  padding: 0 9px;
+  font-size: 10px;
+  background: var(--up);
+  border-color: var(--up);
+  color: #07100c;
+  font-weight: 600;
+}
+
+.varre {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
+.varre-cab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: var(--dim);
+}
+
+.varre-grade {
+  display: grid;
+  gap: 2px;
+}
+
+.varre-topo,
+.varre-lado,
+.varre-canto {
+  font-size: 9px;
+  color: var(--dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.varre-lado {
+  justify-content: flex-end;
+  padding-right: 4px;
+}
+
+.varre-cel {
+  height: 22px;
+  border-radius: 3px;
+  background: #141c1a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  transition: background 0.4s ease;
+}
+
+.varre-cel.melhor {
+  outline: 1px solid var(--up);
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* ---------- negócios grandes ---------- */
+.baleias {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.baleia-linha {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 18px;
+  font-size: 10.5px;
+  animation: sobe 0.3s ease both;
+}
+
+.baleia-trilho {
+  flex-grow: 1;
+  position: relative;
+  height: 15px;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.baleia-barra {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: 3px;
+}
+
+.baleia-qtd {
+  position: relative;
+  padding-left: 5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.baleia-preco {
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.hist-score {
+  width: 22px;
+  text-align: center;
+  font-size: 9px;
+  color: var(--dim);
+  background: #19211f;
+  border-radius: 3px;
+}
+
+/* ---------- mascote ---------- */
+@keyframes flutua {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+.mascote {
+  position: fixed;
+  right: 16px;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  width: 72px;
+  height: 72px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid #14b8a6;
+  background: var(--panel);
+  overflow: hidden;
+  z-index: 40;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  animation: flutua 4s ease-in-out infinite;
+  transition: transform 0.2s ease;
+}
+
+.mascote:hover,
+.mascote:focus-visible {
+  transform: scale(1.06);
+}
+
+.mascote img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* enquanto a imagem não chega */
+.mascote.vazio::after {
+  content: "?";
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 26px;
+  font-weight: 700;
+  color: #14b8a6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.mascote.vazio img {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mascote,
+  .baleia-linha {
+    animation: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .mascote {
+    width: 60px;
+    height: 60px;
+    right: 12px;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+}

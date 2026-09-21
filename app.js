@@ -1,15 +1,18 @@
 import {
   analyse,
+  backtest,
   deltaFromTrades,
   flowFromCandles,
   sma,
   cvdSeries,
+  varrer,
   volumeProfile,
   zoneStats,
-} from "./analysis.js?v=3";
+} from "./analysis.js?v=4";
 import {
   CATEGORIES,
   assetSource,
+  history,
   SYMBOLS,
   TF_SECONDS,
   TIMEFRAMES,
@@ -19,7 +22,7 @@ import {
   spotGold,
   tape,
   universe,
-} from "./feed.js?v=3";
+} from "./feed.js?v=4";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const el = (id) => document.getElementById(id);
@@ -83,6 +86,11 @@ const state = {
   lag: 0,
   spot: 0,
   pos: null,
+  hist: null,
+  bt: null,
+  btErro: null,
+  varredura: null,
+  varrendo: false,
   statusLabel: "",
 };
 
@@ -312,15 +320,23 @@ function buildControls() {
 
   fillSymbols();
 
+  let remedir = null;
+  const remedirDepois = () => {
+    clearTimeout(remedir);
+    remedir = setTimeout(rodarBacktest, 500);
+  };
+
   el("depth").addEventListener("input", (e) => {
     state.depth = parseFloat(e.target.value);
     el("depthVal").textContent = e.target.value;
     lastAnalysis = 0;
+    remedirDepois();
   });
   el("zones").addEventListener("input", (e) => {
     state.zones = parseInt(e.target.value, 10);
     el("zonesVal").textContent = e.target.value;
     lastAnalysis = 0;
+    remedirDepois();
   });
   el("margin").addEventListener("input", (e) => {
     state.margin = parseInt(e.target.value, 10);
@@ -456,6 +472,7 @@ function reload() {
   state.analysis = null;
   shown.price = 0;
   start();
+  rodarBacktest();
 }
 
 /** Refills the asset picker for the chosen group, from the live listing. */
@@ -513,7 +530,8 @@ async function pull() {
     }
 
     state.data = data;
-    if (!state.trades.length) state.trades = data.trades;
+    // without a socket appending prints, each pull brings the current tape
+    if (!state.streaming || !state.trades.length) state.trades = data.trades;
     state.digits = digitsFor(data.stats.price);
     if (!shown.price) shown.price = data.stats.price;
     lastAnalysis = 0;
@@ -662,6 +680,15 @@ function manageTrade(result, candles, fechou) {
       alvo: plano.alvo,
       rr: plano.rr,
       abertura: ultimo ? ultimo.time : Date.now(),
+      // the market as it stood when the call was made; reviewing a loss is
+      // only useful next to what the panel was seeing at the time
+      contexto: {
+        score: result.score,
+        motivos: result.reasons.slice(0, 3),
+        funding: state.pos?.funding ?? null,
+        grandes: state.pos?.grandes?.compradas ?? null,
+        contas: state.pos?.contas?.compradas ?? null,
+      },
     };
     state.ultima = null;
     trade.save(state.aberta);
@@ -675,6 +702,18 @@ function manageTrade(result, candles, fechou) {
 // ---------------------------------------------------------------- laço
 function loop(now) {
   requestAnimationFrame(loop);
+
+// the panel keeps working from the home screen; the worker serves the shell
+// from cache only when the network fails, so updates still land immediately
+const mascoteImg = el("mascoteImg");
+mascoteImg?.addEventListener("error", () => el("mascote")?.classList.add("vazio"));
+if (mascoteImg && !mascoteImg.complete) mascoteImg.addEventListener("load", () => {});
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").catch(() => {});
+  });
+}
   if (!state.data || !state.data.candles.length) return;
 
   if (now - lastAnalysis >= ANALYSIS_MS) {
@@ -1331,6 +1370,22 @@ function mountDeep() {
         <div id="placarBody" class="deep-body"></div>
       </div>
 
+      <div class="card deep-card" id="cardBt">
+        <div class="plan-head">
+          <span class="lbl">MEDIÇÃO DA ESTRATÉGIA</span>
+          <span class="muted" id="btInfo">—</span>
+        </div>
+        <div id="btBody" class="deep-body"></div>
+      </div>
+
+      <div class="card deep-card" id="cardBaleia">
+        <div class="plan-head">
+          <span class="lbl">NEGÓCIOS GRANDES</span>
+          <span class="muted" id="baleiaInfo">—</span>
+        </div>
+        <div id="baleiaBody" class="deep-body"></div>
+      </div>
+
       <div class="card deep-card" id="cardSessao">
         <div class="plan-head">
           <span class="lbl">SESSÃO</span>
@@ -1341,7 +1396,7 @@ function mountDeep() {
     </div>`;
 
   ["posSym", "posBody", "perfilInfo", "perfilBody", "placarInfo", "placarBody",
-   "sessaoInfo", "sessaoBody"].forEach((id) => (R[id] = el(id)));
+   "sessaoInfo", "sessaoBody", "btInfo", "btBody", "baleiaInfo", "baleiaBody"].forEach((id) => (R[id] = el(id)));
 }
 
 /** A line chart small enough to read as a shape rather than a chart. */
@@ -1551,9 +1606,18 @@ function renderPlacar() {
     .map((t) => {
       const ok = t.resultado === "alvo";
       const r = ok ? t.rr : -1;
-      return `<div class="hist-linha">
+      const c = t.contexto;
+      const porque = c
+        ? `placar ${c.score}` +
+          (c.motivos?.length ? ` · ${c.motivos.join(" · ")}` : "") +
+          (c.funding != null ? ` · funding ${(c.funding * 100).toFixed(4)}%` : "") +
+          (c.grandes != null ? ` · grandes ${(c.grandes * 100).toFixed(0)}% comprados` : "")
+        : "sem contexto guardado";
+
+      return `<div class="hist-linha" title="${esc(porque)}">
         <span style="color:${t.side === "compra" ? UP : DOWN}">${t.side === "compra" ? "▲" : "▼"}</span>
         <span class="hist-sym">${t.symbol.replace(/^f:/, "")} ${t.timeframe}</span>
+        ${c ? `<span class="hist-score">${c.score}</span>` : ""}
         <span class="hist-preco">${fmt(t.entrada, digitsFor(t.entrada))}</span>
         <span class="hist-res ${ok ? "ganho" : "perda"}">${ok ? "ALVO" : "STOP"}</span>
         <span class="hist-r" style="color:${ok ? UP : DOWN}">${r >= 0 ? "+" : ""}${r.toFixed(2)}R</span>
@@ -1576,6 +1640,17 @@ function renderPlacar() {
         <span class="m-sub">acerto ${taxa.toFixed(0)}%</span></div>
     </div>
     <div class="hist">${ultimas}</div>
+    ${
+      lista[lista.length - 1]?.contexto
+        ? `<div class="nota"><b>Última:</b> ${(() => {
+            const u = lista[lista.length - 1];
+            const c = u.contexto;
+            return `${u.side} com placar ${c.score}${
+              c.motivos?.length ? ` — ${c.motivos.join(", ")}` : ""
+            }${c.grandes != null ? `; grandes ${(c.grandes * 100).toFixed(0)}% comprados` : ""}.`;
+          })()}</div>`
+        : ""
+    }
     <div class="nota">R é o resultado medido no risco da própria operação: +2R significa
       que ela rendeu duas vezes o que arriscava. Sem taxa e sem deslize.</div>`
   );
@@ -1649,9 +1724,240 @@ function renderSessao(candles, result) {
 
 function paintDeep(candles, price, result) {
   renderPos();
+  renderBaleias();
   renderPerfil(candles, price);
   renderPlacar();
   renderSessao(candles, result);
+}
+
+// ---------------------------------------------------------------- medição
+/**
+ * Runs the panel's own reading over a long stretch of history, so a signal
+ * arrives with its track record attached instead of only its confidence.
+ */
+async function rodarBacktest() {
+  state.bt = null;
+  state.btErro = null;
+  state.varredura = null;
+  renderBacktest();
+
+  try {
+    state.hist = await history(state.symbol, state.timeframe, 1000);
+    if (!state.hist) {
+      state.btErro = "Esta fonte não entrega histórico longo o bastante para medir.";
+    } else {
+      state.bt = backtest(state.hist, {
+        depth: state.depth,
+        zoneLimit: state.zones,
+        flowBars: FLOW_BARS[state.timeframe] || 12,
+      });
+      if (!state.bt) state.btErro = "Histórico curto demais para medir.";
+    }
+  } catch (err) {
+    state.btErro = err.message;
+  }
+
+  renderBacktest();
+}
+
+function otimizar() {
+  if (!state.hist || state.varrendo) return;
+  state.varrendo = true;
+  renderBacktest();
+
+  // let the "measuring" state paint before the sweep blocks the thread
+  setTimeout(() => {
+    try {
+      state.varredura = varrer(state.hist, FLOW_BARS[state.timeframe] || 12);
+    } catch {
+      state.varredura = null;
+    }
+    state.varrendo = false;
+    renderBacktest();
+  }, 30);
+}
+
+function aplicarMelhor() {
+  const m = state.varredura?.melhor;
+  if (!m) return;
+
+  state.depth = m.depth;
+  state.zones = m.zoneLimit;
+  el("depth").value = m.depth;
+  el("zones").value = m.zoneLimit;
+  el("depthVal").textContent = m.depth;
+  el("zonesVal").textContent = m.zoneLimit;
+  lastAnalysis = 0;
+
+  state.bt = backtest(state.hist, {
+    depth: state.depth,
+    zoneLimit: state.zones,
+    flowBars: FLOW_BARS[state.timeframe] || 12,
+  });
+  renderBacktest();
+}
+
+function renderBacktest() {
+  const bt = state.bt;
+  R.btInfo.textContent = bt ? `${bt.barras} barras · ${state.timeframe}` : "—";
+
+  if (!bt) {
+    swap(
+      R.btBody,
+      "bt",
+      `<div class="vazio">${
+        state.btErro || "Medindo a estratégia sobre o histórico…"
+      }</div>`
+    );
+    return;
+  }
+
+  const corR = bt.r >= 0 ? UP : DOWN;
+  const media = bt.total ? bt.r / bt.total : 0;
+
+  const grade = state.varredura
+    ? `<div class="varre">
+        <div class="varre-cab">
+          <span>R por combinação</span>
+          <button class="btn mini-btn" id="btAplicar">usar a melhor</button>
+        </div>
+        <div class="varre-grade" style="grid-template-columns:34px repeat(${
+          state.varredura.niveis.length
+        },1fr)">
+          <span class="varre-canto"></span>
+          ${state.varredura.niveis.map((n) => `<span class="varre-topo">${n}</span>`).join("")}
+          ${state.varredura.grade
+            .map((linha, i) => {
+              const zona = state.varredura.zonas[i];
+              const celulas = linha
+                .map((c) => {
+                  if (!c) return `<span class="varre-cel"></span>`;
+                  const forca = Math.min(1, Math.abs(c.r) / 8);
+                  const cor = c.r >= 0 ? "47,224,138" : "255,77,99";
+                  const melhor = c === state.varredura.melhor;
+                  return `<span class="varre-cel ${melhor ? "melhor" : ""}"
+                    style="background:rgba(${cor},${(forca * 0.55).toFixed(2)})"
+                    title="zona ${c.depth} · níveis ${c.zoneLimit} · ${c.total} operações · acerto ${c.taxa.toFixed(
+                      0
+                    )}%">${c.r >= 0 ? "+" : ""}${c.r.toFixed(1)}</span>`;
+                })
+                .join("");
+              return `<span class="varre-lado">${zona}</span>${celulas}`;
+            })
+            .join("")}
+        </div>
+        <div class="nota">Linhas: tamanho da zona em ATR. Colunas: quantidade de níveis.
+          A melhor aqui é <b>zona ${state.varredura.melhor?.depth} · níveis ${
+            state.varredura.melhor?.zoneLimit
+          }</b>, com ${state.varredura.melhor?.r.toFixed(1)}R em ${
+            state.varredura.melhor?.total
+          } operações.</div>
+      </div>`
+    : `<button class="btn largo" id="btOtimizar" ${state.varrendo ? "disabled" : ""}>${
+        state.varrendo ? "medindo 30 combinações…" : "otimizar os controles"
+      }</button>`;
+
+  swap(
+    R.btBody,
+    "bt",
+    `<div class="metricas">
+      <div class="metrica"><span class="m-rot">OPERAÇÕES</span>
+        <span class="m-val">${bt.total}</span></div>
+      <div class="metrica"><span class="m-rot">ACERTO</span>
+        <span class="m-val">${bt.taxa.toFixed(0)}%</span>
+        <span class="m-sub">${bt.alvos} alvo · ${bt.stops} stop</span></div>
+      <div class="metrica"><span class="m-rot">RESULTADO</span>
+        <span class="m-val" style="color:${corR}">${bt.r >= 0 ? "+" : ""}${bt.r.toFixed(1)}R</span></div>
+      <div class="metrica"><span class="m-rot">POR OPERAÇÃO</span>
+        <span class="m-val" style="color:${corR}">${media >= 0 ? "+" : ""}${media.toFixed(2)}R</span></div>
+    </div>
+
+    <div class="spark-box">
+      <span class="m-rot">CURVA DE RESULTADO</span>
+      ${sparkline(bt.curva.length > 1 ? [0, ...bt.curva] : null, bt.r >= 0 ? UP : DOWN, 44)}
+    </div>
+
+    ${grade}
+
+    <div class="nota">Simulação sobre as barras já fechadas, com os controles atuais.
+      Sem taxa e sem deslize, e uma barra que toca alvo e stop conta como stop — não
+      há como saber qual veio primeiro. Serve para calibrar, não para provar.</div>`
+  );
+
+  el("btOtimizar")?.addEventListener("click", otimizar);
+  el("btAplicar")?.addEventListener("click", aplicarMelhor);
+}
+
+// ---------------------------------------------------------------- baleias
+/**
+ * The tape with the noise removed.
+ *
+ * Most prints are dust. Sizing each one against the median of the window
+ * leaves the trades that actually moved something, whatever the asset's
+ * usual lot size happens to be.
+ */
+function renderBaleias() {
+  const fita = state.trades;
+
+  if (fita.length < 20) {
+    swap(R.baleiaBody, "baleia", `<div class="vazio">Sem fita suficiente nesta fonte.</div>`);
+    R.baleiaInfo.textContent = "—";
+    return;
+  }
+
+  const tamanhos = fita.map((t) => t.qty).sort((a, b) => a - b);
+  const mediana = tamanhos[Math.floor(tamanhos.length / 2)] || 0;
+  const corte = mediana * 8;
+
+  const grandes = fita.filter((t) => t.qty >= corte).slice(-12).reverse();
+  R.baleiaInfo.textContent = `acima de ${short(corte)}`;
+
+  if (!grandes.length) {
+    swap(
+      R.baleiaBody,
+      "baleia",
+      `<div class="vazio">Nenhum negócio grande na janela atual. O maior foi
+       ${short(tamanhos[tamanhos.length - 1])}, contra uma mediana de ${short(mediana)}.</div>`
+    );
+    return;
+  }
+
+  const compra = grandes.filter((t) => t.buyerAggressor).reduce((a, t) => a + t.qty, 0);
+  const venda = grandes.reduce((a, t) => a + t.qty, 0) - compra;
+  const maior = Math.max(...grandes.map((t) => t.qty));
+
+  swap(
+    R.baleiaBody,
+    "baleia",
+    `<div class="metricas">
+      <div class="metrica"><span class="m-rot">GRANDES</span>
+        <span class="m-val">${grandes.length}</span>
+        <span class="m-sub">de ${fita.length} na fita</span></div>
+      <div class="metrica"><span class="m-rot">COMPRARAM</span>
+        <span class="m-val" style="color:${UP}">${short(compra)}</span></div>
+      <div class="metrica"><span class="m-rot">VENDERAM</span>
+        <span class="m-val" style="color:${DOWN}">${short(venda)}</span></div>
+    </div>
+    <div class="baleias">
+      ${grandes
+        .map((t) => {
+          const cor = t.buyerAggressor ? UP : DOWN;
+          return `<div class="baleia-linha">
+            <span style="color:${cor}">${t.buyerAggressor ? "▲" : "▼"}</span>
+            <div class="baleia-trilho">
+              <div class="baleia-barra" style="width:${((t.qty / maior) * 100).toFixed(
+                1
+              )}%;background:${cor}22"></div>
+              <span class="baleia-qtd" style="color:${cor}">${short(t.qty)}</span>
+            </div>
+            <span class="baleia-preco">${fmt(t.price)}</span>
+          </div>`;
+        })
+        .join("")}
+    </div>
+    <div class="nota">Grande é oito vezes a mediana da janela, então o corte acompanha
+      o ativo: no BTC são frações, numa memecoin são bilhões de unidades.</div>`
+  );
 }
 
 // ---------------------------------------------------------------- start
@@ -1660,6 +1966,7 @@ mountDeep();
 buildControls();
 status("", "conectando…");
 start();
+rodarBacktest();
 pullTape();
 setInterval(pullTape, 20000);
 setInterval(pullSpot, 30000);

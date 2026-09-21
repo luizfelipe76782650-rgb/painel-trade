@@ -698,3 +698,36 @@ export async function positioning(symbolId) {
     taker: taker.map((r) => ({ compra: +r.buyVol, venda: +r.sellVol, razao: +r.buySellRatio })),
   };
 }
+
+/**
+ * A longer run of candles than the chart needs, for measuring the strategy.
+ *
+ * Only the Binance venues answer this: the fallbacks cap their history far
+ * shorter, and a measurement over a different amount of data would not be
+ * comparable. When they are serving, the caller gets null and says so.
+ */
+export async function history(symbolId, timeframe, limit = 1000) {
+  const futuro = assetSource(symbolId) === "futures";
+  const provider = futuro ? futures : binance;
+  const sym = symbolFor(provider, symbolId);
+
+  if (!sym) return null;
+  if (!futuro && active && active !== binance) return null;
+
+  const base = futuro ? FAPI : "https://api.binance.com/api/v3";
+  const raw = await getJson(`${base}/klines?symbol=${sym}&interval=${timeframe}&limit=${limit}`);
+
+  return raw.map((k) => {
+    const volume = +k[5];
+    const buy = +k[9];
+    return {
+      time: k[0],
+      open: +k[1],
+      high: +k[2],
+      low: +k[3],
+      close: +k[4],
+      volume,
+      delta: buy - (volume - buy),
+    };
+  });
+}
