@@ -8,7 +8,7 @@ import {
   varrer,
   volumeProfile,
   zoneStats,
-} from "./analysis.js?v=5";
+} from "./analysis.js?v=6";
 import {
   CATEGORIES,
   assetSource,
@@ -22,7 +22,7 @@ import {
   spotGold,
   tape,
   universe,
-} from "./feed.js?v=5";
+} from "./feed.js?v=6";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const el = (id) => document.getElementById(id);
@@ -155,7 +155,9 @@ const short = (v) => {
   if (a >= 1e9) return `${(v / 1e9).toFixed(2)}B`;
   if (a >= 1e6) return `${(v / 1e6).toFixed(2)}M`;
   if (a >= 1e3) return `${(v / 1e3).toFixed(1)}k`;
-  return v.toFixed(2);
+  if (a >= 1) return v.toFixed(2);
+  // a BTC lot is a fraction: two decimals would print every trade as zero
+  return a ? String(Number(v.toPrecision(2))) : "0";
 };
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
