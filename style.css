@@ -3961,3 +3961,64 @@ body {
   .lado-barra { height: 12px; }
   .sent-trilho { height: 11px; }
 }
+
+/* ======================================================================
+   ARRASTAR NÃO É MARCAR TEXTO
+   ======================================================================
+   The price axis, the pills and the candles are real text inside the drawing,
+   so a drag across the chart was read by the browser as a text selection —
+   the numbers lit up blue and the pan fought with the highlight the whole way.
+
+   Selection is switched off across the parts of the panel that are meant to be
+   handled rather than read: the chart and its axis, the controls, the book, the
+   tape. It stays on wherever there are sentences or figures somebody might
+   reasonably want to copy, which is the whole point of not simply putting it
+   on the body. */
+.chart-wrap,
+#chart,
+#chart text,
+.pills,
+.book,
+.book-cols,
+.book-head,
+.tape-strip,
+.ctrls,
+.controls,
+.slider,
+.btn,
+.mini-btn,
+.tf,
+.mascote,
+.aba-btn,
+.caminho,
+.mc-cel,
+.part,
+.gauge,
+.tile {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* while a drag is in flight nothing anywhere should start highlighting */
+body.arrastando,
+body.arrastando * {
+  -webkit-user-select: none !important;
+  user-select: none !important;
+  cursor: grabbing !important;
+}
+
+.chart-wrap { cursor: grab; }
+
+/* sentences and measured figures stay copyable */
+.nota,
+.vazio,
+.cfg-nota,
+.mesa-recado,
+.caminho-conta,
+.inicio-rodape,
+.plan-out,
+.sub-corpo .deep-body,
+.balao-leitura {
+  -webkit-user-select: text;
+  user-select: text;
+}

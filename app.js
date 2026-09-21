@@ -15,7 +15,7 @@ import {
   varrer,
   volumeProfile,
   zoneStats,
-} from "./analysis.js?v=53";
+} from "./analysis.js?v=54";
 import {
   capacidade,
   choques,
@@ -29,7 +29,7 @@ import {
   riscoDaCarteira,
   tendenciaCorrelacao,
   volTermo,
-} from "./mesa.js?v=53";
+} from "./mesa.js?v=54";
 import {
   CATEGORIES,
   JANELA,
@@ -44,7 +44,7 @@ import {
   spotGold,
   tape,
   universe,
-} from "./feed.js?v=53";
+} from "./feed.js?v=54";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const el = (id) => document.getElementById(id);
@@ -475,6 +475,8 @@ function bindGestures() {
 
   wrap.addEventListener("pointerdown", (e) => {
     if (!total()) return;
+    // a class on the body so nothing anywhere starts highlighting mid-drag
+    document.body.classList.add("arrastando");
     wrap.setPointerCapture?.(e.pointerId);
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
@@ -513,9 +515,16 @@ function bindGestures() {
     pointers.delete(e.pointerId);
     if (pointers.size < 2) gesture = null;
     wrap.style.cursor = "grab";
+    if (!pointers.size) document.body.classList.remove("arrastando");
   };
   wrap.addEventListener("pointerup", end);
   wrap.addEventListener("pointercancel", end);
+
+  // a pointer released outside the chart never fires pointerup on it, and the
+  // page would stay locked in the dragging state for good
+  window.addEventListener("pointerup", () => {
+    if (!pointers.size) document.body.classList.remove("arrastando");
+  });
 
   wrap.addEventListener("dblclick", () => {
     state.view = { count: total() || 150, offset: 0 };
@@ -4020,7 +4029,7 @@ const oficina = (() => {
   const abrir = () => {
     if (fio !== null) return fio;
     try {
-      fio = new Worker("./trabalho.js?v=53", { type: "module" });
+      fio = new Worker("./trabalho.js?v=54", { type: "module" });
       fio.onmessage = (e) => {
         const { id, resultado, erro } = e.data || {};
         const pedido = pendentes.get(id);
