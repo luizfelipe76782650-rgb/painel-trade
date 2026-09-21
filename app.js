@@ -10,7 +10,7 @@ import {
   varrer,
   volumeProfile,
   zoneStats,
-} from "./analysis.js?v=12";
+} from "./analysis.js?v=13";
 import {
   CATEGORIES,
   assetSource,
@@ -24,7 +24,7 @@ import {
   spotGold,
   tape,
   universe,
-} from "./feed.js?v=12";
+} from "./feed.js?v=13";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const el = (id) => document.getElementById(id);
@@ -2609,6 +2609,7 @@ function abrirConfig() {
   marcar("cfgMascote", c.mostrarMascote);
   marcar("cfgDica", c.mostrarDica);
   marcar("cfgSom", c.som);
+  el("cfgVozEstado").textContent = voz.estado();
   marcar("cfgCardPos", c.cards.pos);
   marcar("cfgCardPerfil", c.cards.perfil);
   marcar("cfgCardBt", c.cards.bt);
@@ -2718,6 +2719,13 @@ function ligarConta() {
     pintarConta();
   });
 
+  el("cfgTestarVoz")?.addEventListener("click", () => {
+    voz.liberar();
+    voz.ultima = 0; // um teste nunca é engolido pelo intervalo
+    voz.falar("entrada_compra", "neutro");
+    el("cfgVozEstado").textContent = voz.estado();
+  });
+
   el("cfgUsarAtual")?.addEventListener("click", () => {
     config.save({ ativo: state.symbol, tempo: state.timeframe });
     el("cfgAtualSalvo").textContent = `${state.symbol.replace(/^f:/, "")} · ${state.timeframe}`;
@@ -2756,22 +2764,33 @@ const voz = {
   faltando: new Set(),
   ultima: 0,
 
-  /** Browsers only allow sound after the person has touched the page once. */
+  /**
+   * Browsers only start audio inside a gesture, and iOS leaves a context
+   * created outside one suspended. So this runs on every kind of first touch
+   * and tries to resume again on each announcement.
+   */
   liberar() {
-    if (voz.liberado) return;
-    voz.liberado = true;
     try {
-      voz.ctx = new (window.AudioContext || window.webkitAudioContext)();
-      voz.ctx.resume?.();
+      if (!voz.ctx) voz.ctx = new (window.AudioContext || window.webkitAudioContext)();
+      if (voz.ctx.state === "suspended") voz.ctx.resume?.();
+      voz.liberado = voz.ctx.state === "running";
     } catch {
       voz.ctx = null;
     }
   },
 
+  /** What a test should report back: file, tone, or blocked. */
+  estado() {
+    if (!config.load().som) return "desligado nas configurações";
+    if (!voz.ctx) return "o navegador não deixou abrir o som";
+    if (voz.ctx.state !== "running") return "aguardando um toque na tela";
+    return "tocando tons (sem arquivos de voz ainda)";
+  },
+
   tom(tipo) {
     if (!voz.ctx) return;
     const agora = voz.ctx.currentTime;
-    const notas = tipo === "bom" ? [660, 880] : tipo === "ruim" ? [440, 330] : [520];
+    const notas = tipo === "bom" ? [660, 880] : tipo === "ruim" ? [440, 330] : [520, 640];
 
     notas.forEach((hz, i) => {
       const osc = voz.ctx.createOscillator();
@@ -2779,8 +2798,8 @@ const voz = {
       osc.type = "sine";
       osc.frequency.value = hz;
       vol.gain.setValueAtTime(0.0001, agora + i * 0.14);
-      vol.gain.exponentialRampToValueAtTime(0.16, agora + i * 0.14 + 0.02);
-      vol.gain.exponentialRampToValueAtTime(0.0001, agora + i * 0.14 + 0.13);
+      vol.gain.exponentialRampToValueAtTime(0.28, agora + i * 0.14 + 0.02);
+      vol.gain.exponentialRampToValueAtTime(0.0001, agora + i * 0.14 + 0.18);
       osc.connect(vol).connect(voz.ctx.destination);
       osc.start(agora + i * 0.14);
       osc.stop(agora + i * 0.14 + 0.15);
@@ -2793,7 +2812,7 @@ const voz = {
 
     // two announcements on top of each other say nothing
     const agora = Date.now();
-    if (agora - voz.ultima < 1200) return;
+    if (agora - voz.ultima < 700) return;
     voz.ultima = agora;
 
     if (voz.faltando.has(chave)) return voz.tom(tipo);
@@ -2811,7 +2830,9 @@ const voz = {
   },
 };
 
-document.addEventListener("pointerdown", () => voz.liberar(), { once: true });
+["pointerdown", "touchend", "click", "keydown"].forEach((evento) =>
+  document.addEventListener(evento, () => voz.liberar(), { passive: true })
+);
 
 // ---------------------------------------------------------------- start
 const cfgInicial = config.load();

@@ -21,7 +21,7 @@
     <link rel="apple-touch-icon" href="./icone.svg" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <link rel="stylesheet" href="./style.css?v=12" />
+    <link rel="stylesheet" href="./style.css?v=13" />
   </head>
   <body>
     <div class="app">
@@ -161,6 +161,10 @@
               <span>Mostrar a varredura dos tempos</span></label>
             <label class="cfg-opcao"><input type="checkbox" id="cfgSom" />
               <span>Falar em voz alta</span></label>
+            <div class="cfg-linha">
+              <span class="cfg-nota" id="cfgVozEstado">—</span>
+              <button class="btn" id="cfgTestarVoz" type="button">testar o som</button>
+            </div>
           </section>
 
           <section class="cfg-bloco">
@@ -214,6 +218,6 @@
       <div class="balao-lista" id="balaoLista"></div>
     </div>
 
-    <script type="module" src="./app.js?v=12"></script>
+    <script type="module" src="./app.js?v=13"></script>
   </body>
 </html>
