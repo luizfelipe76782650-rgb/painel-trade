@@ -15,7 +15,7 @@ import {
   varrer,
   volumeProfile,
   zoneStats,
-} from "./analysis.js?v=40";
+} from "./analysis.js?v=41";
 import {
   capacidade,
   choques,
@@ -29,7 +29,7 @@ import {
   riscoDaCarteira,
   tendenciaCorrelacao,
   volTermo,
-} from "./mesa.js?v=40";
+} from "./mesa.js?v=41";
 import {
   CATEGORIES,
   JANELA,
@@ -44,7 +44,7 @@ import {
   spotGold,
   tape,
   universe,
-} from "./feed.js?v=40";
+} from "./feed.js?v=41";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const el = (id) => document.getElementById(id);
@@ -121,6 +121,7 @@ const state = {
   lado: null, ladoRodando: false,
   choque: null, choqueRodando: false,
   sent: null, sentRodando: false,
+  capOutros: null, capOutrosRodando: false,
   mapa: null,
   mapeando: false,
   mapaPasso: null,
@@ -4456,6 +4457,40 @@ function renderMonte() {
       '<span style="color:' + UP + '">melhor 5%</span></div></div>';
   };
 
+  /**
+   * Which timeframes are worth anything at all, averaged across the assets.
+   *
+   * Reading sixty cells one by one is how a pattern gets missed; collapsing the
+   * grid by column says in one line where this reading works, which is the
+   * conclusion someone actually takes away from the screen.
+   */
+  const porTempo = TEMPOS_MESA.map((tf) => {
+    const vs = ATIVOS_MESA.map((id) => st.celulas[id + ":" + tf])
+      .filter((c) => c && typeof c.chanceDeLucro === "number");
+    return {
+      tf,
+      n: vs.length,
+      media: vs.length ? vs.reduce((s, c) => s + c.chanceDeLucro, 0) / vs.length : null,
+      bons: vs.filter((c) => c.chanceDeLucro >= 60).length,
+    };
+  }).filter((x) => x.n);
+
+  const resumoTempo = porTempo.length
+    ? '<div class="pf-bloco"><div class="pf-cab">' +
+      '<span class="m-rot">POR TEMPO GRÁFICO</span>' +
+      '<span class="m-sub">média da chance de lucro</span></div>' +
+      '<div class="pf-lista">' + porTempo.map((x) => {
+        const col = x.media >= 60 ? UP : x.media >= 45 ? WARN : DOWN;
+        return '<div class="carrega-linha"><span class="carrega-nome">' + x.tf + "</span>" +
+          '<div class="carrega-trilho"><div class="carrega-fill" style="width:' +
+          x.media.toFixed(0) + "%;background:" + col + '"></div></div>' +
+          '<span class="carrega-val" style="color:' + col + '">' + x.media.toFixed(0) +
+          "% · " + x.bons + "/" + x.n + "</span></div>";
+      }).join("") + "</div>" +
+      '<div class="nota">O segundo número é quantos ativos passaram de 60% de chance naquele ' +
+      "tempo. É o resumo da grade inteira numa linha por tempo.</div></div>"
+    : "";
+
   const detalhe = sel
     ? '<div class="mc-detalhe"><div class="mc-tit">' + esc(state.monteSel.replace(/^f:/, "")) + "</div>" +
       '<div class="metricas">' +
@@ -4488,7 +4523,7 @@ function renderMonte() {
     : '<div class="nota">Toque numa célula para ver o caminho dela. O número é a chance de ' +
       "terminar no lucro em 1.500 reembaralhamentos das operações medidas.</div>";
 
-  swap(R.monteBody, "monte", '<div class="mc-grade">' + cabeca + linhas + "</div>" + detalhe +
+  swap(R.monteBody, "monte", '<div class="mc-grade">' + cabeca + linhas + "</div>" + detalhe + resumoTempo +
     '<button class="btn largo" id="monteBotao">' +
     (state.monteRodando ? "medindo…" : "rodar de novo") + "</button>");
 
@@ -4541,16 +4576,45 @@ async function medirCapacidade() {
     const preco = +livro.asks[0][0];
     const stopPct = preco > 0 ? a / preco : 0;
 
-    if (!bt || bt.total < 5 || !(bt.porOp > 0) || !(stopPct > 0)) {
-      state.cap = { semVantagem: true, ops: bt ? bt.total : 0, porOp: bt ? bt.porOp : null,
-                    timeframe: state.timeframe };
-      return;
-    }
+    /**
+     * The book is measured either way.
+     *
+     * Capacity needs an edge to divide into, but the spread, the depth and what
+     * a given order would slip are facts about the market, not about the
+     * strategy. Hiding them because this timeframe happens to be unprofitable
+     * left the screen almost blank, which read as broken rather than as honest.
+     */
+    const perfil = perfilDoLivro(livro.bids, livro.asks);
+    const temVantagem = bt && bt.total >= 5 && bt.porOp > 0 && stopPct > 0;
+
+    const escorregoes = [1e3, 1e4, 5e4, 2e5, 1e6, 5e6].map((usd) => {
+      const c = impacto(livro.asks, usd);
+      const v = impacto(livro.bids, usd);
+      const estourou = !c || !v || c.estourou || v.estourou;
+      const pct = estourou ? null : c.escorrega + Math.abs(v.escorrega);
+      return {
+        usd,
+        estourou,
+        pct,
+        custoUsd: pct == null ? null : pct * usd,
+        custoR: pct == null || !(stopPct > 0) ? null : (pct + taxaAtual()) / stopPct,
+      };
+    });
+
+    medirCarregam();
 
     state.cap = Object.assign(
-      capacidade(livro.bids, livro.asks, stopPct, bt.porOp, taxaAtual()),
-      { vantagem: bt.porOp, ops: bt.total, timeframe: state.timeframe,
-        perfil: perfilDoLivro(livro.bids, livro.asks) }
+      temVantagem ? capacidade(livro.bids, livro.asks, stopPct, bt.porOp, taxaAtual()) : {},
+      {
+        vantagem: temVantagem ? bt.porOp : null,
+        porOp: bt ? bt.porOp : null,
+        ops: bt ? bt.total : 0,
+        timeframe: state.timeframe,
+        perfil,
+        escorregoes,
+        stopPct,
+        preco,
+      }
     );
   } catch (err) {
     state.cap = { erro: err.message };
@@ -4596,6 +4660,64 @@ function perfilHtml(pf) {
     pf.alcanceVenda.toFixed(2) + "% acima.</div></div>";
 }
 
+/**
+ * Which assets can actually take size, side by side.
+ *
+ * The same order that vanishes into bitcoin moves a smaller coin visibly, and
+ * the difference is not something a chart shows. Walking each book with one
+ * fixed order puts them on the same scale.
+ */
+function carregamHtml(lista) {
+  if (!lista || !lista.length) return "";
+  const maior = Math.max(...lista.map((x) => x.pct || 0)) || 1;
+
+  return '<div class="pf-bloco"><div class="pf-cab">' +
+    '<span class="m-rot">QUEM AGUENTA TAMANHO</span>' +
+    '<span class="m-sub">uma ordem de $200 mil</span></div>' +
+    '<div class="pf-lista">' + lista.map((x) => {
+      const col = x.pct < 0.05 ? UP : x.pct < 0.2 ? WARN : DOWN;
+      return '<div class="carrega-linha"><span class="carrega-nome">' + esc(x.id) + "</span>" +
+        '<div class="carrega-trilho"><div class="carrega-fill" style="width:' +
+        Math.max(2, (x.pct / maior) * 100).toFixed(0) + "%;background:" + col + '"></div></div>' +
+        '<span class="carrega-val" style="color:' + col + '">' + x.pct.toFixed(3) + "%</span></div>";
+    }).join("") + "</div>" +
+    '<div class="nota">Quanto o preço escorrega numa ordem de duzentos mil dólares, ida e ' +
+    "volta. Menos é melhor: é liquidez sobrando.</div></div>";
+}
+
+/**
+ * The same fixed order walked through several books at once.
+ *
+ * Kept separate from the main measurement so a slow list of extra requests
+ * never delays the asset the reader actually opened the screen for.
+ */
+async function medirCarregam() {
+  if (state.capOutrosRodando) return;
+  state.capOutrosRodando = true;
+
+  const ids = ["BTC", "ETH", "SOL", "XRP", "DOGE", "LINK", "AVAX", "LTC"];
+  const saida = [];
+
+  try {
+    for (const id of ids) {
+      const livro = await livroFundo(id);
+      if (!livro) continue;
+      const c = impacto(livro.asks, 2e5);
+      const v = impacto(livro.bids, 2e5);
+      if (!c || !v || c.estourou || v.estourou) { saida.push({ id, pct: 99 }); continue; }
+      saida.push({ id, pct: (c.escorrega + Math.abs(v.escorrega)) * 100 });
+      await respirar();
+    }
+    saida.sort((a, b) => a.pct - b.pct);
+    state.capOutros = saida;
+  } catch {
+    /* uma lista extra que falha não derruba a tela principal */
+  } finally {
+    state.capOutrosRodando = false;
+    renderCap();
+  }
+}
+
 function renderCap() {
   if (!R.capBody) return;
   const ativo = state.symbol.replace(/^f:/, "");
@@ -4619,32 +4741,58 @@ function renderCap() {
   let corpo;
   if (c.erro) {
     corpo = '<div class="vazio">' + esc(c.erro) + "</div>";
-  } else if (c.semVantagem) {
-    corpo = '<div class="vazio">' + esc(ativo) + " no " + esc(c.timeframe) + " rende " +
-      (c.porOp == null ? "—" : (c.porOp >= 0 ? "+" : "") + c.porOp.toFixed(3) + "R") +
-      " por operação em " + c.ops + " medidas. Sem vantagem positiva não há capacidade a " +
-      "calcular — qualquer tamanho perde dinheiro.</div>";
   } else {
-    const linhas = c.degraus.map((d) => {
-      const col = d.estourou ? DOWN : d.sobra > 0 ? UP : DOWN;
-      return '<div class="cap-linha"><span class="cap-usd">$' + d.usd.toLocaleString("pt-BR") +
-        '</span><span class="cap-custo">' +
-        (d.estourou ? "livro não aguenta" : "custa " + d.custoR.toFixed(3) + "R") +
-        '</span><span class="cap-sobra" style="color:' + col + '">' +
-        (d.estourou ? "—" : (d.sobra >= 0 ? "+" : "") + d.sobra.toFixed(3) + "R") + "</span></div>";
-    }).join("");
+    const dinheiro = (v) =>
+      v == null ? "—"
+      : v >= 1e6 ? "$" + (v / 1e6).toFixed(2) + "M"
+      : v >= 1e3 ? "$" + (v / 1e3).toFixed(1) + "k"
+      : "$" + v.toFixed(2);
 
-    corpo = '<div class="metricas">' +
-      '<div class="metrica"><span class="m-rot">VANTAGEM MEDIDA</span>' +
-        '<span class="m-val" style="color:' + UP + '">+' + c.vantagem.toFixed(3) + 'R</span>' +
-        '<span class="m-sub">' + c.ops + " operações</span></div>" +
-      '<div class="metrica"><span class="m-rot">TETO DESTE ATIVO</span>' +
-        '<span class="m-val">$' + Math.round(c.teto).toLocaleString("pt-BR") + "</span>" +
-        '<span class="m-sub">a vantagem some acima disso</span></div></div>' +
-      '<div class="cap-lista">' + linhas + "</div>" + perfilHtml(c.perfil) +
-      '<div class="nota">Ida e volta pelo livro de 1.000 níveis, mais a corretagem escolhida, ' +
-      "dividido pela distância do stop. É a pergunta que mesa faz antes de qualquer outra: " +
-      "quanto dinheiro isso carrega antes de virar nada.</div>";
+    const topo = c.vantagem
+      ? '<div class="metricas">' +
+        '<div class="metrica"><span class="m-rot">VANTAGEM MEDIDA</span>' +
+          '<span class="m-val" style="color:' + UP + '">+' + c.vantagem.toFixed(3) + 'R</span>' +
+          '<span class="m-sub">' + c.ops + " operações no " + esc(c.timeframe) + "</span></div>" +
+        '<div class="metrica"><span class="m-rot">TETO DESTE ATIVO</span>' +
+          '<span class="m-val">$' + Math.round(c.teto).toLocaleString("pt-BR") + "</span>" +
+          '<span class="m-sub">a vantagem some acima disso</span></div>' +
+        '<div class="metrica"><span class="m-rot">STOP TÍPICO</span>' +
+          '<span class="m-val">' + (c.stopPct * 100).toFixed(2) + "%</span>" +
+          '<span class="m-sub">do preço, 1 ATR</span></div>' +
+        "</div>"
+      : '<div class="mesa-recado" style="border-left-color:' + WARN + '">' +
+        esc(ativo) + " no " + esc(c.timeframe) + " rende <strong>" +
+        (c.porOp == null ? "—" : (c.porOp >= 0 ? "+" : "") + c.porOp.toFixed(3) + "R") +
+        "</strong> por operação em " + c.ops + " medidas. Sem vantagem positiva não há teto a " +
+        "calcular — qualquer tamanho perde. O livro abaixo continua valendo: ele é do mercado, " +
+        "não da estratégia.</div>";
+
+    const escada = c.escorregoes
+      ? '<div class="pf-cab"><span class="m-rot">O QUE A SUA ORDEM PAGA</span>' +
+        '<span class="m-sub">ida e volta</span></div>' +
+        '<div class="cap-lista">' + c.escorregoes.map((d) => {
+          if (d.estourou) {
+            return '<div class="cap-linha"><span class="cap-usd">$' +
+              d.usd.toLocaleString("pt-BR") + '</span>' +
+              '<span class="cap-custo">o livro de mil níveis não aguenta</span>' +
+              '<span class="cap-sobra" style="color:' + DOWN + '">—</span></div>';
+          }
+          const sobra = c.vantagem == null ? null : c.vantagem - d.custoR;
+          const col = sobra == null ? NEU : sobra > 0 ? UP : DOWN;
+          return '<div class="cap-linha"><span class="cap-usd">$' +
+            d.usd.toLocaleString("pt-BR") + "</span>" +
+            '<span class="cap-custo">' + (d.pct * 100).toFixed(3) + "% · " +
+            dinheiro(d.custoUsd) + " · " + d.custoR.toFixed(3) + "R</span>" +
+            '<span class="cap-sobra" style="color:' + col + '">' +
+            (sobra == null ? "" : (sobra >= 0 ? "+" : "") + sobra.toFixed(3) + "R") + "</span></div>";
+        }).join("") + "</div>"
+      : "";
+
+    corpo = topo + escada + perfilHtml(c.perfil) + carregamHtml(state.capOutros) +
+      '<div class="nota">O escorregão é a média paga acima do topo do livro, na ida e na volta. ' +
+      "Em R ele é dividido pela distância do stop, que é a única unidade em que dá para comparar " +
+      "com a vantagem. É a pergunta que mesa faz antes de qualquer outra: quanto dinheiro isso " +
+      "carrega antes de virar nada.</div>";
   }
 
   swap(R.capBody, "cap", corpo + '<button class="btn largo" id="capBotao">medir de novo</button>');
@@ -4700,6 +4848,13 @@ async function medirMesa() {
       risco,
       media: n ? soma / n : null,
       melhor: melhorPar(usados, matriz),
+      soltos: usados
+        .map((id, i) => {
+          const linha = matriz[i].filter((c, j) => j !== i && c != null);
+          return { id, media: linha.length ? linha.reduce((s, c) => s + c, 0) / linha.length : null };
+        })
+        .filter((x) => x.media != null)
+        .sort((a, b) => a.media - b.media),
       tendencia: tendenciaCorrelacao(dados, correlacao),
     };
   } catch (err) {
@@ -4795,7 +4950,24 @@ function renderMesa() {
             : "estável nas últimas 180 horas") + "</span></div>"
       : "");
 
+  const soltosHtml = m.soltos && m.soltos.length
+    ? '<div class="pf-bloco"><div class="pf-cab">' +
+      '<span class="m-rot">QUEM ANDA MAIS SOZINHO</span>' +
+      '<span class="m-sub">correlação média com os outros</span></div>' +
+      '<div class="pf-lista">' + m.soltos.map((x) => {
+        const col = x.media < 0.5 ? UP : x.media < 0.7 ? WARN : DOWN;
+        return '<div class="carrega-linha"><span class="carrega-nome">' +
+          esc(x.id.replace(/^f:/, "")) + "</span>" +
+          '<div class="carrega-trilho"><div class="carrega-fill" style="width:' +
+          Math.max(2, x.media * 100).toFixed(0) + "%;background:" + col + '"></div></div>' +
+          '<span class="carrega-val" style="color:' + col + '">' + x.media.toFixed(2) + "</span></div>";
+      }).join("") + "</div>" +
+      '<div class="nota">Do mais independente ao mais colado. O de cima é o único que acrescenta ' +
+      "alguma coisa a uma carteira que já tem os outros.</div></div>"
+    : "";
+
   swap(R.mesaBody, "mesa", topo + recado + extra + '<div class="mc-grade">' + cabeca + linhas + "</div>" +
+    soltosHtml +
     '<div class="nota">Correlação dos retornos de hora em hora nas últimas 700 barras. ' +
     'Vermelho é andar junto, verde é andar contra. Na diagonal cada ativo consigo mesmo.</div>' +
     '<button class="btn largo" id="mesaBotao">medir de novo</button>');
@@ -4856,6 +5028,8 @@ async function medirLado() {
       curvaGrandes: grandes && grandes.length ? grandes.map((x) => +x.longAccount * 100) : null,
       curvaOi: oiHist && oiHist.length ? oiHist.map((x) => +x.sumOpenInterest) : null,
       precoVariacao: state.data && state.data.stats ? state.data.stats.changePct : null,
+      varejoMin: Math.min(...contas.map((x) => +x.longAccount * 100)),
+      varejoMax: Math.max(...contas.map((x) => +x.longAccount * 100)),
     };
   } catch (err) {
     state.lado = { erro: err.message };
@@ -4947,6 +5121,15 @@ function renderLado() {
         '<span class="m-val" style="color:' + (l.oiVariacao > 0 ? UP : l.oiVariacao < 0 ? DOWN : NEU) + '">' +
         num(l.oiVariacao, "%", 1) + "</span>" +
         '<span class="m-sub">nas últimas 24h</span></div>' +
+      '<div class="metrica"><span class="m-rot">FUNDING AO ANO</span>' +
+        '<span class="m-val" style="color:' +
+        (l.funding > 0 ? DOWN : l.funding < 0 ? UP : NEU) + '">' +
+        num(l.funding == null ? null : l.funding * 3 * 365, "%", 1) + "</span>" +
+        '<span class="m-sub">se ficasse assim o ano todo</span></div>' +
+      '<div class="metrica"><span class="m-rot">VAREJO EM 24H</span>' +
+        '<span class="m-val">' + (l.varejoMin == null ? "—" :
+          l.varejoMin.toFixed(0) + "–" + l.varejoMax.toFixed(0) + "%") + "</span>" +
+        '<span class="m-sub">mínimo e máximo comprado</span></div>' +
     "</div>" +
     (l.curvaVarejo && l.curvaVarejo.length > 4
       ? '<div class="spark-dupla">' +
@@ -4983,15 +5166,39 @@ async function medirChoque() {
     const velas = await history(state.symbol, state.timeframe, 2000);
     if (!velas || velas.length < 200) { state.choque = { erro: "Histórico curto demais." }; return; }
 
-    const lista = choques(velas, { olharAdiante: 12, limite: 8 });
+    const lista = choques(velas, { olharAdiante: 12, limite: 12 });
     const depois = lista.map((c) => c.depois).filter((x) => typeof x === "number");
     const media = depois.length ? depois.reduce((s, x) => s + x, 0) / depois.length : null;
+
+    /**
+     * Does the market continue the shock or give it back?
+     *
+     * Every shock in the window, split by direction, and scored on whether the
+     * hours afterwards went the same way. This is the only question that makes
+     * a shock tradeable, and it is asked of this asset rather than of a saying.
+     */
+    const todos = choques(velas, { olharAdiante: 12, limite: 9999 });
+    const paraCima = todos.filter((x) => x.retorno > 0);
+    const paraBaixo = todos.filter((x) => x.retorno < 0);
+    const seguiu = (arr) =>
+      arr.length ? (arr.filter((x) => Math.sign(x.depois) === Math.sign(x.retorno)).length / arr.length) * 100 : null;
+    const mediaDe = (arr) =>
+      arr.length ? arr.reduce((s, x) => s + x.depois, 0) / arr.length : null;
 
     state.choque = {
       lista,
       media,
       vol: volTermo(velas, TF_SECONDS[state.timeframe] || 3600),
       horas: porHora(velas, TF_SECONDS[state.timeframe] || 3600),
+      resumo: {
+        total: todos.length,
+        altaN: paraCima.length,
+        altaSeguiu: seguiu(paraCima),
+        altaMedia: mediaDe(paraCima),
+        baixaN: paraBaixo.length,
+        baixaSeguiu: seguiu(paraBaixo),
+        baixaMedia: mediaDe(paraBaixo),
+      },
       timeframe: state.timeframe,
       symbol: state.symbol,
     };
@@ -5097,7 +5304,28 @@ function renderChoque() {
       h.morta.hora + "h</strong> (" + h.morta.faixa.toFixed(2) + "%).</div></div>";
   })();
 
-  swap(R.choqueBody, "choque", topo + horasHtml +
+  const resumoHtml = (() => {
+    const r = c.resumo;
+    if (!r || !r.total) return "";
+    const linha = (rot, n, pct, med, cor) =>
+      n
+        ? '<div class="choque-resumo-linha"><span class="m-rot">' + rot + "</span>" +
+          '<span class="choque-resumo-val" style="color:' + cor + '">' + pct.toFixed(0) + "%</span>" +
+          '<span class="m-sub">seguiram · ' + n + " choques · média " +
+          (med >= 0 ? "+" : "") + (med * 100).toFixed(2) + "%</span></div>"
+        : "";
+
+    return '<div class="pf-bloco"><div class="pf-cab">' +
+      '<span class="m-rot">O CHOQUE CONTINUA OU VOLTA?</span>' +
+      '<span class="m-sub">' + r.total + " no histórico</span></div>" +
+      linha("SUSTO PARA CIMA", r.altaN, r.altaSeguiu, r.altaMedia, UP) +
+      linha("SUSTO PARA BAIXO", r.baixaN, r.baixaSeguiu, r.baixaMedia, DOWN) +
+      '<div class="nota">Quantos por cento dos choques foram seguidos por mais movimento no ' +
+      "mesmo sentido nas 12 barras seguintes. Perto de 50% quer dizer moeda ao ar: o susto foi " +
+      "o movimento inteiro.</div></div>";
+  })();
+
+  swap(R.choqueBody, "choque", topo + resumoHtml + horasHtml +
     '<div class="choque-cab"><span>quando</span><span>movimento</span><span>tamanho</span>' +
     "<span>12 barras depois</span></div>" +
     '<div class="choque-lista">' + linhas + "</div>" + veredito +
@@ -5230,8 +5458,16 @@ async function medirSentimento() {
       return null;
     };
 
+    // onde o índice costuma ficar, para saber se hoje é fora do comum
+    const todosV = serie.map((d) => d.v).sort((a, b) => a - b);
+    const percentil = (todosV.filter((v) => v <= hoje.v).length / todosV.length) * 100;
+    const baldes = [0, 0, 0, 0, 0];
+    for (const v of todosV) baldes[Math.min(4, Math.floor(v / 20))]++;
+
     state.sent = {
       hoje,
+      percentil,
+      baldes: baldes.map((n) => (n / todosV.length) * 100),
       curva: serie.slice(-90).map((d) => d.v),
       desdeMedo: desde((v) => v <= 25),
       desdeGanancia: desde((v) => v >= 75),
@@ -5318,12 +5554,29 @@ function renderSent() {
       '<span class="m-sub">dias acima de 75</span></div>' +
     "</div>";
 
+  const distribuicao = s.baldes
+    ? '<div class="pf-bloco"><div class="pf-cab">' +
+      '<span class="m-rot">ONDE O ÍNDICE COSTUMA FICAR</span>' +
+      '<span class="m-sub">desde 2018</span></div>' +
+      '<div class="dist-grade">' + s.baldes.map((pct, i) => {
+        const faixaCor = [DOWN, WARN, NEU, "#8fd39f", UP][i];
+        const aqui = Math.min(4, Math.floor(v / 20)) === i;
+        return '<div class="dist-col"><div class="dist-barra" style="height:' +
+          Math.max(3, pct * 2.6).toFixed(0) + "px;background:" + faixaCor +
+          ";opacity:" + (aqui ? "1" : "0.42") + '"></div>' +
+          '<span class="dist-rot">' + (i * 20) + "–" + (i * 20 + 20) + "</span>" +
+          '<span class="dist-pct">' + pct.toFixed(0) + "%</span></div>";
+      }).join("") + "</div>" +
+      '<div class="nota">O índice de hoje está acima de <strong>' + s.percentil.toFixed(0) +
+      "%</strong> de todos os dias já medidos. A coluna acesa é a faixa de agora.</div></div>"
+    : "";
+
   const procurados = s.procurados
     ? '<div class="sent-busca"><span class="m-rot">MAIS PROCURADOS AGORA</span><div class="sent-tags">' +
       s.procurados.map((t) => '<span class="sent-tag">' + esc(t) + "</span>").join("") + "</div></div>"
     : "";
 
-  swap(R.sentBody, "sent", medidor + historia + extremos + tabela + veredito + procurados +
+  swap(R.sentBody, "sent", medidor + historia + extremos + tabela + veredito + distribuicao + procurados +
     '<button class="btn largo" id="sentBotao">atualizar</button>');
   el("sentBotao")?.addEventListener("click", medirSentimento);
 }
