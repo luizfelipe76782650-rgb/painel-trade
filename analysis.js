@@ -422,27 +422,21 @@ export function backtest(candles, opts = {}) {
   let r = 0;
 
   for (let i = warmup; i < candles.length; i++) {
-    const barra = candles[i - 1];
+    const janela = candles.slice(0, i);
 
     if (aberta) {
-      const parou =
-        aberta.side === "compra" ? barra.low <= aberta.stop : barra.high >= aberta.stop;
-      const chegou =
-        aberta.side === "compra" ? barra.high >= aberta.alvo : barra.low <= aberta.alvo;
+      const fim = acompanharStop(aberta, janela, aberta.atr, pivots(janela));
+      aberta.stop = fim.stop;
 
-      // a bar that touches both is counted as a loss: without tick data there
-      // is no way to know which came first, and assuming the win flatters it
-      if (parou || chegou) {
-        const ganhou = chegou && !parou;
-        r += ganhou ? aberta.rr : -1;
-        operacoes.push({ ...aberta, resultado: ganhou ? "alvo" : "stop", fim: barra.time });
+      if (fim.resultado) {
+        r += fim.r;
+        operacoes.push({ ...aberta, resultado: fim.resultado, r: fim.r, fim: fim.fim });
         curva.push(r);
         aberta = null;
       }
       continue;
     }
 
-    const janela = candles.slice(0, i);
     const flow = flowFromCandles(janela, flowBars);
     const res = analyse(janela, {
       depth,
@@ -450,17 +444,27 @@ export function backtest(candles, opts = {}) {
       flow: flow ? { ...flow, total: flow.buy + flow.sell } : null,
     });
 
-    if (res.plan && res.plan.side !== "fora") aberta = { ...res.plan, inicio: barra.time };
+    if (res.plan && res.plan.side !== "fora") {
+      const ultima = janela[janela.length - 1];
+      aberta = {
+        ...res.plan,
+        stopInicial: res.plan.stop,
+        atr: res.atr,
+        abertura: ultima.time,
+      };
+    }
   }
 
   const alvos = operacoes.filter((o) => o.resultado === "alvo").length;
+  const empates = operacoes.filter((o) => o.resultado === "empate").length;
 
   return {
     operacoes,
     curva,
     total: operacoes.length,
     alvos,
-    stops: operacoes.length - alvos,
+    empates,
+    stops: operacoes.length - alvos - empates,
     taxa: operacoes.length ? (alvos / operacoes.length) * 100 : 0,
     r,
     barras: candles.length - warmup,
@@ -487,4 +491,87 @@ export function varrer(candles, flowBars, zonas = [0.2, 0.4, 0.6, 0.8, 1.2, 1.6]
   }
 
   return { grade, zonas, niveis, melhor };
+}
+
+/**
+ * Walks an open trade forward, moving its stop.
+ *
+ * Two rules, in order. Once the market has paid the risk once — one R in
+ * favour — the stop goes to the entry, and from there the trade cannot lose.
+ * After that it follows the structure: the stop sits just beyond the most
+ * recent confirmed swing behind price. It never moves backwards, so a stop
+ * that has been tightened stays tightened.
+ *
+ * The whole path is replayed from the entry on every call, which makes the
+ * result depend only on the candles — the live panel and the backtest run the
+ * same code and cannot drift apart.
+ */
+export function acompanharStop(t, candles, a, pivos) {
+  const long = t.side === "compra";
+  const stopInicial = t.stopInicial ?? t.stop;
+  const risco = Math.abs(t.entrada - stopInicial);
+
+  const vazio = { stop: stopInicial, empatou: false, movimentos: [], resultado: null, r: null };
+  if (!(risco > 0)) return vazio;
+
+  const umR = long ? t.entrada + risco : t.entrada - risco;
+  const inicio = candles.findIndex((c) => c.time >= t.abertura);
+  if (inicio < 0) return vazio;
+
+  let stop = stopInicial;
+  let empatou = false;
+  const movimentos = [];
+
+  for (let i = inicio; i < candles.length; i++) {
+    const c = candles[i];
+
+    const parou = long ? c.low <= stop : c.high >= stop;
+    const chegou = long ? c.high >= t.alvo : c.low <= t.alvo;
+
+    // a bar that touches both counts as the stop: without tick data there is
+    // no way to know which came first, and assuming the win flatters it
+    if (parou || chegou) {
+      const saida = parou ? stop : t.alvo;
+      const r = ((saida - t.entrada) / risco) * (long ? 1 : -1);
+      return {
+        stop,
+        empatou,
+        movimentos,
+        resultado: chegou && !parou ? "alvo" : r >= 0 ? "empate" : "stop",
+        saida,
+        fim: c.time,
+        r,
+      };
+    }
+
+    if (!empatou && (long ? c.high >= umR : c.low <= umR)) {
+      empatou = true;
+      if (long ? t.entrada > stop : t.entrada < stop) {
+        stop = t.entrada;
+        movimentos.push({ quando: c.time, stop, motivo: "empate" });
+      }
+    }
+
+    if (empatou && pivos) {
+      const lista = long ? pivos.lows : pivos.highs;
+
+      for (let k = lista.length - 1; k >= 0; k--) {
+        const idx = lista[k];
+        if (idx + 3 > i) continue; // ainda não confirmado nesta barra
+
+        const nivel = long ? candles[idx].low - a * 0.15 : candles[idx].high + a * 0.15;
+        const melhora = long ? nivel > stop : nivel < stop;
+        // a stop already past the price would close the trade on the spot
+        const cabe = long ? nivel < c.close : nivel > c.close;
+
+        if (melhora && cabe) {
+          stop = nivel;
+          movimentos.push({ quando: c.time, stop, motivo: "estrutura" });
+        }
+        break; // só o pivô mais recente interessa
+      }
+    }
+  }
+
+  return { stop, empatou, movimentos, resultado: null, r: null };
 }

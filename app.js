@@ -1,14 +1,16 @@
 import {
+  acompanharStop,
   analyse,
   backtest,
   deltaFromTrades,
   flowFromCandles,
+  pivots,
   sma,
   cvdSeries,
   varrer,
   volumeProfile,
   zoneStats,
-} from "./analysis.js?v=11";
+} from "./analysis.js?v=12";
 import {
   CATEGORIES,
   assetSource,
@@ -22,7 +24,7 @@ import {
   spotGold,
   tape,
   universe,
-} from "./feed.js?v=11";
+} from "./feed.js?v=12";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const el = (id) => document.getElementById(id);
@@ -135,17 +137,9 @@ const trade = {
     }
   },
 
-  outcome(t, candles) {
-    for (const c of candles.filter((c) => c.time >= t.abertura)) {
-      if (t.side === "compra") {
-        if (c.low <= t.stop) return "stop";
-        if (c.high >= t.alvo) return "alvo";
-      } else {
-        if (c.high >= t.stop) return "stop";
-        if (c.low <= t.alvo) return "alvo";
-      }
-    }
-    return null;
+  /** Replays the trade from its entry, moving the stop by the rule. */
+  acompanhar(t, candles, atr) {
+    return acompanharStop(t, candles, atr || t.atr || 0, pivots(candles));
   },
 };
 
@@ -657,12 +651,27 @@ function manageTrade(result, candles, fechou) {
   if (state.aberta === null && state.ultima === null) state.aberta = trade.load();
 
   if (state.aberta) {
-    const fim = trade.outcome(state.aberta, candles);
-    if (!fim) {
+    const t = state.aberta;
+    t.stopInicial = t.stopInicial ?? t.stop; // operação salva antes desta regra
+
+    const passo = trade.acompanhar(t, candles, result.atr);
+    const moveu = passo.stop !== t.stop;
+
+    t.stop = passo.stop;
+    t.empatou = passo.empatou;
+    t.movimentos = passo.movimentos;
+
+    if (!passo.resultado) {
+      if (moveu) {
+        const ultimo = passo.movimentos[passo.movimentos.length - 1];
+        avisarStop(ultimo);
+        trade.save(t);
+      }
       state.pendente = null;
-      return state.aberta;
+      return t;
     }
-    state.ultima = { ...state.aberta, resultado: fim };
+
+    state.ultima = { ...t, resultado: passo.resultado, r: passo.r, saida: passo.saida };
     historico.add({
       ...state.ultima,
       symbol: state.symbol,
@@ -688,6 +697,10 @@ function manageTrade(result, candles, fechou) {
       stop: plano.stop,
       alvo: plano.alvo,
       rr: plano.rr,
+      stopInicial: plano.stop,
+      atr: result.atr,
+      empatou: false,
+      movimentos: [],
       abertura: ultimo ? ultimo.time : Date.now(),
       // the market as it stood when the call was made; reviewing a loss is
       // only useful next to what the panel was seeing at the time
@@ -933,7 +946,16 @@ function planBody(aberta, plano) {
           1
         )}</span>
       </div>
-      <div style="font-size:10px;color:var(--dim);margin:2px 0 6px">desde ${desde}</div>
+      <div class="plan-estado">
+        <span>desde ${desde}</span>
+        ${
+          aberta.empatou
+            ? `<span class="protegida">PROTEGIDA${
+                aberta.movimentos?.length > 1 ? ` · ${aberta.movimentos.length} ajustes` : ""
+              }</span>`
+            : ""
+        }
+      </div>
       <div class="tiles">
         <div class="tile"><div class="t" style="color:var(--dim)">ENTRADA</div>
           <div class="v">${fmt(aberta.entrada)}</div></div>
@@ -1209,7 +1231,22 @@ function drawChart(result, candles, price, aberta) {
         ...(dash ? { "stroke-dasharray": dash } : {}),
       });
     level(aberta.alvo, WARN, "7 4");
-    level(aberta.stop, DOWN, "7 4");
+
+    // where the stop began, so the move is visible rather than assumed
+    if (aberta.stopInicial && aberta.stopInicial !== aberta.stop) {
+      add("line", {
+        x1: 0,
+        x2: right,
+        y1: y(aberta.stopInicial),
+        y2: y(aberta.stopInicial),
+        stroke: DOWN,
+        "stroke-width": 1,
+        "stroke-dasharray": "2 6",
+        opacity: 0.35,
+      });
+    }
+
+    level(aberta.stop, aberta.empatou ? WARN : DOWN, "7 4");
     level(aberta.entrada, col, null);
   }
 
@@ -1306,7 +1343,12 @@ function drawPills(result, aberta, y, g) {
   if (aberta) {
     const col = aberta.side === "compra" ? UP : DOWN;
     pill("right", y(aberta.alvo), WARN, `ALVO ${val(aberta.alvo)}`);
-    pill("right", y(aberta.stop), DOWN, `STOP ${val(aberta.stop)}`);
+    pill(
+      "right",
+      y(aberta.stop),
+      aberta.empatou ? WARN : DOWN,
+      `${aberta.empatou ? "STOP ✓" : "STOP"} ${val(aberta.stop)}`
+    );
     pill("right", y(aberta.entrada), col, `${aberta.side.toUpperCase()} ${val(aberta.entrada)}`);
   }
 
@@ -1612,9 +1654,11 @@ function renderPlacar() {
   }
 
   const alvos = lista.filter((t) => t.resultado === "alvo").length;
-  const stops = lista.length - alvos;
+  const empates = lista.filter((t) => t.resultado === "empate").length;
+  const stops = lista.length - alvos - empates;
   const taxa = (alvos / lista.length) * 100;
-  const rTotal = lista.reduce((a, t) => a + (t.resultado === "alvo" ? t.rr : -1), 0);
+  const erre = (t) => t.r ?? (t.resultado === "alvo" ? t.rr : -1);
+  const rTotal = lista.reduce((a, t) => a + erre(t), 0);
   const corR = rTotal >= 0 ? UP : DOWN;
 
   const ultimas = lista
@@ -1622,7 +1666,8 @@ function renderPlacar() {
     .reverse()
     .map((t) => {
       const ok = t.resultado === "alvo";
-      const r = ok ? t.rr : -1;
+      const empate = t.resultado === "empate";
+      const r = erre(t);
       const c = t.contexto;
       const porque = c
         ? `placar ${c.score}` +
@@ -1636,8 +1681,12 @@ function renderPlacar() {
         <span class="hist-sym">${t.symbol.replace(/^f:/, "")} ${t.timeframe}</span>
         ${c ? `<span class="hist-score">${c.score}</span>` : ""}
         <span class="hist-preco">${fmt(t.entrada, digitsFor(t.entrada))}</span>
-        <span class="hist-res ${ok ? "ganho" : "perda"}">${ok ? "ALVO" : "STOP"}</span>
-        <span class="hist-r" style="color:${ok ? UP : DOWN}">${r >= 0 ? "+" : ""}${r.toFixed(2)}R</span>
+        <span class="hist-res ${ok ? "ganho" : empate ? "neutro" : "perda"}">${
+          ok ? "ALVO" : empate ? "EMPATE" : "STOP"
+        }</span>
+        <span class="hist-r" style="color:${r > 0 ? UP : r < 0 ? DOWN : NEU}">${
+          r >= 0 ? "+" : ""
+        }${r.toFixed(2)}R</span>
       </div>`;
     })
     .join("");
@@ -1650,6 +1699,8 @@ function renderPlacar() {
         <span class="m-val">${lista.length}</span></div>
       <div class="metrica"><span class="m-rot">ALVO</span>
         <span class="m-val" style="color:${UP}">${alvos}</span></div>
+      <div class="metrica"><span class="m-rot">EMPATE</span>
+        <span class="m-val" style="color:${NEU}">${empates}</span></div>
       <div class="metrica"><span class="m-rot">STOP</span>
         <span class="m-val" style="color:${DOWN}">${stops}</span></div>
       <div class="metrica"><span class="m-rot">RESULTADO</span>
@@ -1882,7 +1933,7 @@ function renderBacktest() {
         <span class="m-val">${bt.total}</span></div>
       <div class="metrica"><span class="m-rot">ACERTO</span>
         <span class="m-val">${bt.taxa.toFixed(0)}%</span>
-        <span class="m-sub">${bt.alvos} alvo · ${bt.stops} stop</span></div>
+        <span class="m-sub">${bt.alvos} alvo · ${bt.empates ?? 0} empate · ${bt.stops} stop</span></div>
       <div class="metrica"><span class="m-rot">RESULTADO</span>
         <span class="m-val" style="color:${corR}">${bt.r >= 0 ? "+" : ""}${bt.r.toFixed(1)}R</span></div>
       <div class="metrica"><span class="m-rot">POR OPERAÇÃO</span>
@@ -2034,6 +2085,7 @@ function vigiar() {
       )} · R:R 1:${a.rr.toFixed(1)}`,
       a.side === "compra" ? UP : DOWN
     );
+    voz.falar(a.side === "compra" ? "entrada_compra" : "entrada_venda", "neutro");
   }
   v.aberta = chaveAberta;
 
@@ -2042,15 +2094,35 @@ function vigiar() {
   if (chaveUltima && chaveUltima !== v.ultima && config.load().avisarResultado) {
     const u = state.ultima;
     const ok = u.resultado === "alvo";
+    const r = u.r ?? (ok ? u.rr : -1);
     vigia.add(
       ok ? "alvo" : "stop",
-      `${ok ? "Alvo atingido" : "Stop atingido"} em ${ativo}: ${u.side} de ${fmt(
-        u.entrada
-      )} · ${ok ? "+" + u.rr.toFixed(2) : "−1.00"}R`,
+      `${
+        ok ? "Alvo atingido" : u.resultado === "empate" ? "Saiu no empate" : "Stop atingido"
+      } em ${ativo}: ${u.side} de ${fmt(u.entrada)} · ${r >= 0 ? "+" : ""}${r.toFixed(2)}R`,
       ok ? UP : DOWN
     );
+    voz.falar(ok ? "alvo" : u.resultado === "empate" ? "stop_empate" : "stop", ok ? "bom" : "ruim");
   }
   v.ultima = chaveUltima;
+}
+
+/** A stop that moved is the one message worth interrupting for. */
+function avisarStop(movimento) {
+  if (!movimento) return;
+  const ativo = state.symbol.replace(/^f:/, "");
+
+  if (movimento.motivo === "empate") {
+    vigia.add(
+      "empate",
+      `Stop de ${ativo} movido para o preço de entrada — a operação não perde mais`,
+      WARN
+    );
+    voz.falar("stop_empate", "bom");
+  } else {
+    vigia.add("ajuste", `Stop de ${ativo} ajustado para ${fmt(movimento.stop)}`, INFO);
+    voz.falar("stop_ajustado", "neutro");
+  }
 }
 
 /** The disagreement between the crowd and the size, when there is one. */
@@ -2413,6 +2485,7 @@ const config = {
     avisarResultado: true,
     mostrarMascote: true,
     mostrarDica: true,
+    som: true,
     cards: { pos: true, perfil: true, bt: true, baleia: true, placar: true, sessao: true },
   },
 
@@ -2535,6 +2608,7 @@ function abrirConfig() {
   marcar("cfgResultado", c.avisarResultado);
   marcar("cfgMascote", c.mostrarMascote);
   marcar("cfgDica", c.mostrarDica);
+  marcar("cfgSom", c.som);
   marcar("cfgCardPos", c.cards.pos);
   marcar("cfgCardPerfil", c.cards.perfil);
   marcar("cfgCardBt", c.cards.bt);
@@ -2556,6 +2630,7 @@ function salvarConfig() {
     avisarResultado: el("cfgResultado").checked,
     mostrarMascote: el("cfgMascote").checked,
     mostrarDica: el("cfgDica").checked,
+    som: el("cfgSom").checked,
     cards: {
       pos: el("cfgCardPos").checked,
       perfil: el("cfgCardPerfil").checked,
@@ -2664,6 +2739,79 @@ function ligarConta() {
     el("cfgAviso").textContent = "histórico apagado.";
   });
 }
+
+// ---------------------------------------------------------------- voz
+/**
+ * The panel speaks a fixed, small vocabulary.
+ *
+ * Because the phrases never change and carry no numbers, they can be real
+ * recordings rather than a synthesiser — a person reads them once and the
+ * panel plays the file. Until those files exist, each one falls back to a
+ * short tone, so the timing and the triggers can be tested now and the voice
+ * dropped in later without touching anything here.
+ */
+const voz = {
+  ctx: null,
+  liberado: false,
+  faltando: new Set(),
+  ultima: 0,
+
+  /** Browsers only allow sound after the person has touched the page once. */
+  liberar() {
+    if (voz.liberado) return;
+    voz.liberado = true;
+    try {
+      voz.ctx = new (window.AudioContext || window.webkitAudioContext)();
+      voz.ctx.resume?.();
+    } catch {
+      voz.ctx = null;
+    }
+  },
+
+  tom(tipo) {
+    if (!voz.ctx) return;
+    const agora = voz.ctx.currentTime;
+    const notas = tipo === "bom" ? [660, 880] : tipo === "ruim" ? [440, 330] : [520];
+
+    notas.forEach((hz, i) => {
+      const osc = voz.ctx.createOscillator();
+      const vol = voz.ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = hz;
+      vol.gain.setValueAtTime(0.0001, agora + i * 0.14);
+      vol.gain.exponentialRampToValueAtTime(0.16, agora + i * 0.14 + 0.02);
+      vol.gain.exponentialRampToValueAtTime(0.0001, agora + i * 0.14 + 0.13);
+      osc.connect(vol).connect(voz.ctx.destination);
+      osc.start(agora + i * 0.14);
+      osc.stop(agora + i * 0.14 + 0.15);
+    });
+  },
+
+  falar(chave, tipo = "neutro") {
+    if (!config.load().som) return;
+    voz.liberar();
+
+    // two announcements on top of each other say nothing
+    const agora = Date.now();
+    if (agora - voz.ultima < 1200) return;
+    voz.ultima = agora;
+
+    if (voz.faltando.has(chave)) return voz.tom(tipo);
+
+    const audio = new Audio(`./voz/${chave}.mp3`);
+    audio.volume = 0.9;
+    audio.addEventListener("error", () => {
+      voz.faltando.add(chave); // não tenta de novo nesta sessão
+      voz.tom(tipo);
+    });
+    audio.play().catch(() => {
+      voz.faltando.add(chave);
+      voz.tom(tipo);
+    });
+  },
+};
+
+document.addEventListener("pointerdown", () => voz.liberar(), { once: true });
 
 // ---------------------------------------------------------------- start
 const cfgInicial = config.load();
