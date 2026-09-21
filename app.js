@@ -15,7 +15,7 @@ import {
   varrer,
   volumeProfile,
   zoneStats,
-} from "./analysis.js?v=38";
+} from "./analysis.js?v=39";
 import {
   capacidade,
   choques,
@@ -24,7 +24,7 @@ import {
   monteCarlo,
   riscoDaCarteira,
   volTermo,
-} from "./mesa.js?v=38";
+} from "./mesa.js?v=39";
 import {
   CATEGORIES,
   JANELA,
@@ -39,7 +39,7 @@ import {
   spotGold,
   tape,
   universe,
-} from "./feed.js?v=38";
+} from "./feed.js?v=39";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const el = (id) => document.getElementById(id);
@@ -3740,6 +3740,13 @@ pullTape();
 setTimeout(escanear, 3000);
 setTimeout(medirComite, 5000);
 setTimeout(mapear, 9000);
+
+// as telas leves ficam prontas antes de alguém pedir; o Monte Carlo e a mesa
+// são pesados demais para rodar sem que ninguém tenha aberto a aba
+setTimeout(medirSentimento, 12000);
+setTimeout(medirLado, 14000);
+setTimeout(medirChoque, 16000);
+setTimeout(medirCapacidade, 18000);
 setInterval(pullTape, 20000);
 setInterval(pullSpot, 30000);
 setInterval(pullDeep, DEEP_MS);
@@ -4214,10 +4221,33 @@ function irPara(destino) {
 
   const titulo = cartao.querySelector(".lbl")?.textContent?.trim() || "";
   el("subTitulo").textContent = titulo;
+  comecarTela(destino);
   el("subCorpo").replaceChildren(cartao);
   el("sub").hidden = false;
   el("subCorpo").scrollTop = 0;
   el("subVoltar").focus();
+}
+
+/**
+ * A screen starts measuring the moment it is opened.
+ *
+ * Asking someone to press a button to see the thing they just navigated to is
+ * a step that exists only because it was easier to write. Each screen knows
+ * whether it already has an answer for the asset on screen, so opening it twice
+ * costs nothing, and the button stays for asking again on purpose.
+ */
+const COMECAR = {
+  cardSent: () => (state.sent || state.sentRodando ? null : medirSentimento()),
+  cardMonte: () => (state.monte || state.monteRodando ? null : rodarMonte()),
+  cardCap: () => (state.cap || state.capRodando ? null : medirCapacidade()),
+  cardMesa: () => (state.mesa || state.mesaRodando ? null : medirMesa()),
+  cardLado: () => (state.lado || state.ladoRodando ? null : medirLado()),
+  cardChoque: () => (state.choque || state.choqueRodando ? null : medirChoque()),
+};
+
+function comecarTela(destino) {
+  const comeca = COMECAR[destino];
+  if (comeca) setTimeout(comeca, 60); // deixa a tela aparecer antes de travar o fio
 }
 
 /** Puts the block back in the panel exactly where it was. */
@@ -4486,7 +4516,7 @@ function renderCap() {
   const c = state.cap;
 
   if (state.capRodando) {
-    swap(R.capBody, "cap", '<div class="vazio">andando pelo livro…</div>');
+    swap(R.capBody, "cap", '<div class="vazio">andando pelos mil níveis do livro…</div>');
     return;
   }
 
@@ -4722,7 +4752,7 @@ function renderLado() {
   R.ladoInfo.textContent = state.ladoRodando ? "buscando…" : ativo + " · perpétuo";
   const l = state.lado;
 
-  if (state.ladoRodando) { swap(R.ladoBody, "lado", '<div class="vazio">buscando…</div>'); return; }
+  if (state.ladoRodando) { swap(R.ladoBody, "lado", '<div class="vazio">buscando os dois lados da mesa…</div>'); return; }
 
   if (!l) {
     swap(R.ladoBody, "lado", '<div class="vazio">A Binance publica, separado, o quanto as contas ' +
@@ -5029,7 +5059,7 @@ function renderSent() {
   const s = state.sent;
   R.sentInfo.textContent = state.sentRodando ? "buscando…" : "mercado cripto";
 
-  if (state.sentRodando) { swap(R.sentBody, "sent", '<div class="vazio">buscando…</div>'); return; }
+  if (state.sentRodando) { swap(R.sentBody, "sent", '<div class="vazio">buscando os dois lados da mesa…</div>'); return; }
 
   if (!s) {
     swap(R.sentBody, "sent", '<div class="vazio">O índice de medo e ganância aparece em todo ' +
