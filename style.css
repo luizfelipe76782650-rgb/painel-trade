@@ -25,7 +25,7 @@
   --info: #6f9bff;
 
   /* prosa em sans; número e rótulo continuam em mono */
-  --prosa: "Archivo", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --prosa: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
 * {
@@ -177,7 +177,7 @@ button {
 }
 
 .lbl {
-  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   font-size: 9px;
   letter-spacing: 0.1em;
   color: var(--dim);
@@ -201,7 +201,7 @@ button {
 }
 
 .chart-head .sym {
-  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   font-size: 16px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -371,7 +371,7 @@ button {
   right: 0;
   top: 44px;
   text-align: center;
-  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   font-size: 27px;
   font-weight: 700;
 }
@@ -429,7 +429,7 @@ button {
 }
 
 .plan-dir .word {
-  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   font-size: 22px;
   font-weight: 700;
   letter-spacing: 0.05em;
@@ -524,7 +524,7 @@ button {
 }
 
 .plan-wait-head {
-  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -548,7 +548,7 @@ button {
 }
 
 .plan-result {
-  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -935,7 +935,7 @@ button {
 }
 
 .deep-title {
-  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.18em;
@@ -1479,7 +1479,7 @@ button {
 /* enquanto a imagem não chega */
 .mascote.vazio .mascote-corpo::after {
   content: "?";
-  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   font-size: 26px;
   font-weight: 700;
   color: #14b8a6;
@@ -1582,7 +1582,7 @@ button {
   border-radius: 10px;
   background: var(--down);
   color: #fff;
-  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   font-size: 11px;
   font-weight: 700;
   line-height: 20px;
@@ -1798,7 +1798,7 @@ button {
 }
 
 .dica-tf {
-  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -1890,7 +1890,7 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   font-size: 9px;
   font-weight: 700;
   color: var(--dim);
@@ -1957,7 +1957,7 @@ button {
 }
 
 .modal-titulo {
-  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.16em;
@@ -1985,7 +1985,7 @@ button {
 }
 
 .cfg-rotulo {
-  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   font-size: 9px;
   letter-spacing: 0.12em;
   color: var(--dim);
@@ -2007,7 +2007,7 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   font-size: 20px;
   font-weight: 700;
   color: var(--dim);
@@ -2141,7 +2141,7 @@ button {
 }
 
 .protegida {
-  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   font-size: 8.5px;
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -2159,7 +2159,7 @@ button {
 
 /* ---------- ficha do ativo ---------- */
 .veredito {
-  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -2310,7 +2310,7 @@ button {
 }
 
 .eq-linha b {
-  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   font-size: 16px;
   color: var(--text);
 }
@@ -2587,7 +2587,7 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   font-size: 14px;
   font-weight: 700;
   color: var(--dim);
@@ -2602,7 +2602,7 @@ button {
 }
 
 .inicio-ola {
-  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   font-size: 15px;
   font-weight: 600;
   color: var(--text);
@@ -2672,7 +2672,7 @@ button {
 }
 
 .caminho-titulo {
-  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   font-size: 15px;
   font-weight: 600;
   line-height: 1.25;
@@ -2748,7 +2748,7 @@ button {
 .hero-quem { display: flex; align-items: baseline; gap: 7px; }
 
 .hero-ativo {
-  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   font-size: 19px;
   font-weight: 700;
   letter-spacing: 0.01em;
@@ -2767,7 +2767,7 @@ button {
 .hero-preco { display: flex; align-items: baseline; gap: 8px; }
 
 .hero-valor {
-  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   font-size: 22px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -2945,7 +2945,7 @@ button {
 }
 
 .mc-tit {
-  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   font-size: 13px;
   font-weight: 600;
   margin-bottom: 8px;
@@ -3108,7 +3108,7 @@ button {
 .sent-medidor { text-align: center; margin-bottom: 14px; }
 
 .sent-num {
-  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   font-size: 40px;
   font-weight: 700;
   line-height: 1;
@@ -3283,7 +3283,7 @@ button {
 }
 
 .mesa-par strong {
-  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   font-size: 14px;
   font-weight: 600;
 }
@@ -3381,7 +3381,7 @@ button {
 }
 
 .choque-resumo-val {
-  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   font-size: 17px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -4089,10 +4089,11 @@ body.arrastando * {
    Inter with Space Grotesk is the most predictable pairing on the web, and a
    panel about money deserves a face chosen for what it has to do.
 
-   Archivo carries the words: a grotesque built for signage, slightly narrow
-   and squared off, which holds its shape at eleven pixels on a dark ground
-   where a softer face goes to mush. Its heavier weights have real presence,
-   so headings stop needing a second family to look like headings.
+   Plus Jakarta Sans carries the words. Archivo was here first and held its
+   shape well, but this one was picked for how it looks rather than only how it
+   survives: round, generous shapes and soft terminals, the face a paid product
+   wears. Its 700 and 800 have presence enough that headings need no second
+   family.
 
    JetBrains Mono carries every figure. It was drawn for people staring at
    characters all day, and its digits are the point: a zero that cannot be an
@@ -4105,7 +4106,7 @@ body.arrastando * {
   font-weight: 600;
 }
 
-/* Archivo runs a touch tighter than Inter, so headings get their space back */
+/* superseded below, where Jakarta takes the tracking back off */
 .caminho-titulo,
 .mc-tit,
 .inicio-ola,
@@ -4271,4 +4272,87 @@ body.arrastando * {
   font-weight: 450;
   font-family: var(--prosa);
   letter-spacing: 0;
+}
+
+/* ======================================================================
+   PLUS JAKARTA SANS
+   ======================================================================
+   Chosen for the look of the thing: generous round shapes and soft terminals,
+   the face a paid product wears. It runs wider than Archivo, so the tracking
+   that Archivo needed comes back off — left in place it would push the labels
+   past the boxes I measured them into — and the display weights go up, since
+   Jakarta carries 700 and 800 with real presence and headings no longer need a
+   second family to look like headings.
+
+   Every figure stays in JetBrains Mono: a zero that cannot be an O and a one
+   that cannot be an l matter more on a price than any amount of beauty. */
+.caminho-titulo,
+.mc-tit,
+.inicio-ola,
+.plan-dir .word,
+.deep-title,
+.lbl {
+  letter-spacing: 0;
+}
+
+.caminho-titulo,
+.inicio-ola,
+.mc-tit {
+  font-weight: 700;
+}
+
+.plan-dir .word,
+.hero-ativo {
+  font-weight: 800;
+  letter-spacing: -0.015em;
+}
+
+/* Jakarta sets a little large for its size; the prose comes back a hair */
+.nota,
+.vazio,
+.cfg-nota,
+.mesa-recado,
+.caminho-conta,
+.inicio-rodape,
+.plan-out {
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+@media (min-width: 900px) {
+  .nota,
+  .vazio,
+  .cfg-nota,
+  .mesa-recado,
+  .caminho-conta,
+  .inicio-rodape,
+  .plan-out {
+    font-size: 13px;
+    line-height: 1.62;
+  }
+}
+
+/* the uppercase labels need their tracking back, but less than before */
+.m-rot,
+.cfg-rotulo,
+.choque-cab,
+.sent-cab,
+.pf-cab .m-rot {
+  letter-spacing: 0.05em;
+}
+
+/* A price is a column of digits that changes several times a second. In a
+   proportional face each tick redraws at a different width and the number
+   twitches sideways; in a monospace with tabular figures it stands still and
+   only the digits change. The ticker's NAME can stay in the reading face —
+   it is a word — but every figure goes back to the mono. */
+.hero-valor,
+.hero-var,
+.px,
+#chartPrice,
+.chart-price,
+.big-price {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
 }

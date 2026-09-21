@@ -15,7 +15,7 @@ import {
   varrer,
   volumeProfile,
   zoneStats,
-} from "./analysis.js?v=61";
+} from "./analysis.js?v=63";
 import {
   capacidade,
   choques,
@@ -29,7 +29,7 @@ import {
   riscoDaCarteira,
   tendenciaCorrelacao,
   volTermo,
-} from "./mesa.js?v=61";
+} from "./mesa.js?v=63";
 import {
   CATEGORIES,
   JANELA,
@@ -44,7 +44,7 @@ import {
   spotGold,
   tape,
   universe,
-} from "./feed.js?v=61";
+} from "./feed.js?v=63";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const el = (id) => document.getElementById(id);
@@ -4029,7 +4029,7 @@ const oficina = (() => {
   const abrir = () => {
     if (fio !== null) return fio;
     try {
-      fio = new Worker("./trabalho.js?v=61", { type: "module" });
+      fio = new Worker("./trabalho.js?v=63", { type: "module" });
       fio.onmessage = (e) => {
         const { id, resultado, erro } = e.data || {};
         const pedido = pendentes.get(id);
