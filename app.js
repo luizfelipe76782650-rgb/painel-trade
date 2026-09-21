@@ -10,7 +10,7 @@ import {
   varrer,
   volumeProfile,
   zoneStats,
-} from "./analysis.js?v=14";
+} from "./analysis.js?v=15";
 import {
   CATEGORIES,
   assetSource,
@@ -24,7 +24,7 @@ import {
   spotGold,
   tape,
   universe,
-} from "./feed.js?v=14";
+} from "./feed.js?v=15";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const el = (id) => document.getElementById(id);
@@ -2844,6 +2844,32 @@ const voz = {
     });
   },
 
+  /**
+   * A tick for the interface itself.
+   *
+   * Short, quiet and outside the announcement spacing — pressing three
+   * buttons in a row should tick three times, while three market events in a
+   * row should still only speak once.
+   */
+  clique(agudo = false) {
+    if (!config.load().som || !voz.ctx || voz.ctx.state !== "running") return;
+
+    const agora = voz.ctx.currentTime;
+    const osc = voz.ctx.createOscillator();
+    const vol = voz.ctx.createGain();
+
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(agudo ? 1500 : 1100, agora);
+    osc.frequency.exponentialRampToValueAtTime(agudo ? 900 : 700, agora + 0.04);
+    vol.gain.setValueAtTime(0.0001, agora);
+    vol.gain.exponentialRampToValueAtTime(0.09, agora + 0.006);
+    vol.gain.exponentialRampToValueAtTime(0.0001, agora + 0.05);
+
+    osc.connect(vol).connect(voz.ctx.destination);
+    osc.start(agora);
+    osc.stop(agora + 0.06);
+  },
+
   falar(chave, tipo = "neutro") {
     if (!config.load().som) return;
     voz.liberar();
@@ -2899,6 +2925,24 @@ if ("speechSynthesis" in window) {
 
 ["pointerdown", "touchend", "click", "keydown"].forEach((evento) =>
   document.addEventListener(evento, () => voz.liberar(), { passive: true })
+);
+
+// a tick on anything the person actually presses
+document.addEventListener(
+  "click",
+  (e) => {
+    if (e.target.closest("button, .btn, .cfg-opcao, .cfg-arquivo")) voz.clique();
+  },
+  { passive: true }
+);
+
+// sliders and pickers tick when they settle, not on every step
+document.addEventListener(
+  "change",
+  (e) => {
+    if (e.target.matches("select, input[type=range]")) voz.clique(true);
+  },
+  { passive: true }
 );
 
 // ---------------------------------------------------------------- start
