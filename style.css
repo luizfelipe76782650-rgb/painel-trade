@@ -3867,3 +3867,26 @@ body {
   .aba-btn { width: 30px; height: 30px; left: 11px; top: calc(2px + env(safe-area-inset-top, 0px)); }
   .aba-btn svg { width: 17px; height: 17px; }
 }
+
+/* The tape slides leftwards by its own transform, so the strip's padding does
+   not hold it back — the prices kept appearing in the sliver beside the button.
+   An opaque block paints that gutter shut, under the button and over the tape. */
+.tape-strip {
+  position: relative;
+}
+
+.tape-strip::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 40px;
+  background: #0c100f;
+  z-index: 2;
+  pointer-events: none;
+}
+
+@media (min-width: 900px) {
+  .tape-strip::before { width: 54px; }
+}
