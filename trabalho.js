@@ -17,8 +17,8 @@ import {
   fichaComite,
   testarFamilia,
   varrer,
-} from "./analysis.js?v=59";
-import { leque, monteCarlo } from "./mesa.js?v=59";
+} from "./analysis.js?v=61";
+import { leque, monteCarlo } from "./mesa.js?v=61";
 
 /** The per-trade results a backtest produced, recovered from its equity curve. */
 function resultadosDe(bt) {

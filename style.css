@@ -4160,3 +4160,115 @@ body.arrastando * {
 
 .part .track { grid-area: trilho; }
 .part .val { grid-area: valor; width: auto; }
+
+/* ======================================================================
+   O QUE SE MEXE NA TELA INICIAL
+   ======================================================================
+   The screen was measuring six things in the background and showing none of
+   them until a tab was opened, so it read as a menu of doors. Now each tile
+   carries the one figure behind its door and it lands with a small movement.
+   Everything that moves here is reporting something; nothing moves for the
+   sake of moving, which is why the hero's sweep is slow and only the arriving
+   number pops. */
+.caminho-topo {
+  position: relative;
+  gap: 8px;
+}
+
+.caminho-vivo {
+  margin-left: auto;
+  padding: 3px 9px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.caminho-vivo.chegou {
+  animation: selo-chega 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes selo-chega {
+  0%   { opacity: 0; transform: translateY(-4px) scale(0.86); }
+  60%  { opacity: 1; transform: translateY(0) scale(1.06); }
+  100% { opacity: 1; transform: none; }
+}
+
+/* the icon leans in when the tile is pointed at */
+.caminho-icone {
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.25s ease;
+}
+
+.caminho:hover .caminho-icone,
+.caminho:focus-visible .caminho-icone {
+  transform: translateY(-2px) scale(1.06);
+  background: color-mix(in srgb, var(--cor) 20%, transparent);
+}
+
+.caminho-seta { transition: transform 0.25s ease, color 0.2s ease; }
+.caminho:hover .caminho-seta { transform: translateX(3px); }
+
+/* a slow light crossing the hero, once every twelve seconds */
+.hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    105deg,
+    transparent 38%,
+    rgba(255, 255, 255, 0.045) 48%,
+    transparent 58%
+  );
+  transform: translateX(-120%);
+  animation: hero-passa 12s ease-in-out infinite;
+}
+
+@keyframes hero-passa {
+  0%, 62%  { transform: translateX(-120%); }
+  84%, 100% { transform: translateX(120%); }
+}
+
+/* the live dot in the header breathes with the connection */
+.inicio-sub::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--up);
+  vertical-align: middle;
+  animation: beat 2.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .caminho-vivo.chegou,
+  .hero::after,
+  .inicio-sub::before {
+    animation: none;
+  }
+  .caminho:hover .caminho-icone,
+  .caminho:hover .caminho-seta {
+    transform: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .caminho-vivo { font-size: 10.5px; padding: 2px 8px; }
+}
+
+/* the two heavy screens only measure when opened, so their badge says so
+   quietly rather than sitting blank or inventing a figure */
+.caminho-vivo.discreto {
+  background: none;
+  opacity: 0.55;
+  font-weight: 450;
+  font-family: var(--prosa);
+  letter-spacing: 0;
+}

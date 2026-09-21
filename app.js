@@ -15,7 +15,7 @@ import {
   varrer,
   volumeProfile,
   zoneStats,
-} from "./analysis.js?v=59";
+} from "./analysis.js?v=61";
 import {
   capacidade,
   choques,
@@ -29,7 +29,7 @@ import {
   riscoDaCarteira,
   tendenciaCorrelacao,
   volTermo,
-} from "./mesa.js?v=59";
+} from "./mesa.js?v=61";
 import {
   CATEGORIES,
   JANELA,
@@ -44,7 +44,7 @@ import {
   spotGold,
   tape,
   universe,
-} from "./feed.js?v=59";
+} from "./feed.js?v=61";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const el = (id) => document.getElementById(id);
@@ -4029,7 +4029,7 @@ const oficina = (() => {
   const abrir = () => {
     if (fio !== null) return fio;
     try {
-      fio = new Worker("./trabalho.js?v=59", { type: "module" });
+      fio = new Worker("./trabalho.js?v=61", { type: "module" });
       fio.onmessage = (e) => {
         const { id, resultado, erro } = e.data || {};
         const pedido = pendentes.get(id);
@@ -4100,6 +4100,13 @@ const CAMINHOS = [
     titulo: "Operar",
     conta: "O gráfico ao vivo, com a entrada, o stop e o alvo desenhados na tela.",
     linha: "Entrada confirmada no fechamento da barra",
+    vivo: () => {
+      const p = state.analysis && state.analysis.plan;
+      if (!p) return null;
+      if (p.side === "compra") return { txt: "COMPRA", cor: UP };
+      if (p.side === "venda") return { txt: "VENDA", cor: DOWN };
+      return { txt: "FORA", cor: NEU };
+    },
     cor: "#14b8a6",
     icone: `<path d="M3 17l6-6 4 4 8-8"/><path d="M21 7v6h-6"/>`,
   },
@@ -4108,6 +4115,12 @@ const CAMINHOS = [
     titulo: "Sentimento do mercado",
     conta: "O medo e a ganância de hoje — e o que cada faixa rendeu na semana seguinte.",
     linha: "3.151 dias medidos desde 2018",
+    vivo: () => {
+      const h = state.sent && state.sent.hoje;
+      if (!h) return null;
+      const v = h.v;
+      return { txt: String(v), cor: v >= 75 ? UP : v >= 55 ? "#8fd39f" : v >= 45 ? NEU : v >= 25 ? WARN : DOWN };
+    },
     cor: "#ff9f5c",
     icone: `<circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0"/><path d="M9 9h.01M15 9h.01"/>`,
   },
@@ -4116,6 +4129,15 @@ const CAMINHOS = [
     titulo: "Monte Carlo",
     conta: "Todos os ativos em todos os tempos, reembaralhados mil e quinhentas vezes.",
     linha: "A chance de lucro, não a média",
+    vivo: () => {
+      const c = state.monte && state.monte.celulas;
+      // roda só ao abrir: pesado demais para medir sem alguém pedir
+      if (!c) return { txt: "medir", cor: NEU, discreto: true };
+      const feitas = Object.values(c).filter((x) => x && typeof x.chanceDeLucro === "number");
+      if (!feitas.length) return null;
+      const melhor = Math.max(...feitas.map((x) => x.chanceDeLucro));
+      return { txt: melhor.toFixed(0) + "%", cor: melhor >= 75 ? UP : melhor >= 55 ? WARN : DOWN };
+    },
     cor: "#b47cf0",
     icone: `<path d="M3 3v18h18"/><path d="M7 16c2-6 4 2 5-4s3 5 5-3"/>`,
   },
@@ -4124,6 +4146,19 @@ const CAMINHOS = [
     titulo: "Capacidade e impacto",
     conta: "Quanto dinheiro este ativo carrega antes da vantagem sumir no livro.",
     linha: "Mil níveis de livro, ao vivo",
+    vivo: () => {
+      const c = state.cap;
+      if (!c || c.erro) return null;
+      if (c.teto) {
+        const m = c.teto / 1e6;
+        return { txt: m >= 1 ? "$" + m.toFixed(1) + "M" : "$" + Math.round(c.teto / 1e3) + "k", cor: UP };
+      }
+      if (c.perfil) {
+        const bps = c.perfil.spreadBps;
+        return { txt: (bps < 0.01 ? bps.toFixed(3) : bps.toFixed(2)) + " bps", cor: NEU };
+      }
+      return null;
+    },
     cor: "#2fe08a",
     icone: `<path d="M3 12h4l3-8 4 16 3-8h4"/>`,
   },
@@ -4132,6 +4167,11 @@ const CAMINHOS = [
     titulo: "Mesa de risco",
     conta: "Quantas das suas posições são, na verdade, a mesma posição.",
     linha: "Correlação entre dez ativos",
+    vivo: () => {
+      const m = state.mesa;
+      if (!m || m.media == null) return { txt: "medir", cor: NEU, discreto: true };
+      return { txt: m.media.toFixed(2), cor: m.media > 0.7 ? DOWN : m.media > 0.4 ? WARN : UP };
+    },
     cor: "#ff7a88",
     icone: `<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>`,
   },
@@ -4140,6 +4180,11 @@ const CAMINHOS = [
     titulo: "Quem está do outro lado",
     conta: "As contas comuns contra as maiores, funding, prêmio e posições abertas.",
     linha: "Os dois lados da mesa, separados",
+    vivo: () => {
+      const l = state.lado;
+      if (!l || l.erro || l.grandesLong == null) return null;
+      return { txt: l.grandesLong.toFixed(0) + "% ↑", cor: l.grandesLong >= 55 ? UP : l.grandesLong <= 45 ? DOWN : NEU };
+    },
     cor: "#5c8cff",
     icone: `<path d="M12 3v18"/><path d="M5 8h4M15 8h4"/><circle cx="7" cy="14" r="3"/><circle cx="17" cy="14" r="3"/>`,
   },
@@ -4148,6 +4193,15 @@ const CAMINHOS = [
     titulo: "Choques e volatilidade",
     conta: "As barras em que algo aconteceu, o tamanho do susto e o que veio depois.",
     linha: "Lido da fita, sem manchete",
+    vivo: () => {
+      const v = state.choque && state.choque.vol;
+      if (!v || v.razao == null) return null;
+      const r = v.razao;
+      return {
+        txt: r > 1.3 ? "ESTICADA" : r < 0.7 ? "COMPRIMIDA" : "NORMAL",
+        cor: r > 1.3 ? DOWN : r < 0.7 ? WARN : NEU,
+      };
+    },
     cor: "#f5b72a",
     largo: true,
     icone: `<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>`,
@@ -4157,6 +4211,10 @@ const CAMINHOS = [
     titulo: "Minha conta",
     conta: "Nome, foto, corretagem, voz e quais blocos aparecem embaixo do gráfico.",
     linha: "A taxa escolhida entra em toda medição",
+    vivo: () => {
+      const t = taxaAtual();
+      return { txt: t ? (t * 100).toFixed(2) + "%" : "sem taxa", cor: NEU };
+    },
     cor: "#8fa39b",
     largo: true,
     icone: `<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>`,
@@ -4200,7 +4258,8 @@ function renderInicio() {
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${v.icone}</svg>
           </span>
-          <span class="caminho-seta">
+          <span class="caminho-vivo" data-vivo="${v.id}" hidden></span>
+        <span class="caminho-seta">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M9 18l6-6-6-6"/></svg>
@@ -4220,6 +4279,50 @@ function renderInicio() {
   );
 
   desenharHero(true);
+  pintarVivos();
+}
+
+/**
+ * The number each path is about, on the path itself.
+ *
+ * The screen was measuring six things in the background and showing none of
+ * them until you opened the tab, so it sat there looking like a menu. Each
+ * tile now carries the one figure behind its door, and it arrives with a small
+ * movement when the measurement lands — which is the only animation on this
+ * screen that is telling you something rather than decorating.
+ */
+function pintarVivos() {
+  const corpo = el("abaCorpo");
+  if (!corpo) return;
+
+  for (const caminho of CAMINHOS) {
+    const alvo = corpo.querySelector(`[data-vivo="${caminho.id}"]`);
+    if (!alvo) continue;
+
+    let valor = null;
+    try {
+      valor = caminho.vivo ? caminho.vivo() : null;
+    } catch {
+      valor = null;
+    }
+
+    if (!valor) {
+      alvo.hidden = true;
+      continue;
+    }
+
+    const novo = valor.txt;
+    if (alvo.textContent === novo && !alvo.hidden) continue;
+
+    alvo.textContent = novo;
+    alvo.style.color = valor.cor;
+    alvo.style.borderColor = valor.discreto ? "transparent" : valor.cor + "55";
+    alvo.classList.toggle("discreto", !!valor.discreto);
+    alvo.hidden = false;
+    alvo.classList.remove("chegou");
+    void alvo.offsetWidth; // reinicia a animação
+    alvo.classList.add("chegou");
+  }
 }
 
 /**
@@ -4418,6 +4521,10 @@ function ligarAba() {
   setInterval(() => {
     if (!aba.hidden) desenharHero(false);
   }, 4000);
+
+  setInterval(() => {
+    if (!aba.hidden) pintarVivos();
+  }, 1500);
   const fechar = () => {
     fecharSub();
     aba.hidden = true;
