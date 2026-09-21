@@ -8,7 +8,7 @@ import {
   varrer,
   volumeProfile,
   zoneStats,
-} from "./analysis.js?v=9";
+} from "./analysis.js?v=10";
 import {
   CATEGORIES,
   assetSource,
@@ -22,7 +22,7 @@ import {
   spotGold,
   tape,
   universe,
-} from "./feed.js?v=9";
+} from "./feed.js?v=10";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const el = (id) => document.getElementById(id);
@@ -2180,39 +2180,49 @@ async function escanear() {
   const ativo = state.symbol;
   const achados = [];
 
-  for (const tf of TEMPOS_SCAN) {
-    try {
-      const velas = await history(ativo, tf, 200);
-      if (!velas || velas.length < 60) continue;
-      if (state.symbol !== ativo) return; // trocou de ativo no meio
+  try {
+    for (const tf of TEMPOS_SCAN) {
+      try {
+        // a request that never settles would otherwise hold the scan open and,
+        // with it, the lock that keeps the next one from starting
+        const velas = await Promise.race([
+          history(ativo, tf, 200),
+          new Promise((ok) => setTimeout(() => ok(null), 8000)),
+        ]);
 
-      const flow = flowFromCandles(velas, FLOW_BARS[tf] || 12);
-      const r = analyse(velas, {
-        depth: state.depth,
-        zoneLimit: state.zones,
-        flow: flow ? { ...flow, total: flow.buy + flow.sell } : null,
-      });
+        if (!velas || velas.length < 60) continue;
+        if (state.symbol !== ativo) return; // trocou de ativo no meio
 
-      if (r.plan && r.plan.side !== "fora") {
-        const aberta = velas[velas.length - 1];
-        achados.push({
-          tf,
-          side: r.plan.side,
-          score: r.score,
-          rr: r.plan.rr,
-          entrada: r.plan.entrada,
-          fecha: aberta.time + (TF_SECONDS[tf] || 60) * 1000,
+        const flow = flowFromCandles(velas, FLOW_BARS[tf] || 12);
+        const r = analyse(velas, {
+          depth: state.depth,
+          zoneLimit: state.zones,
+          flow: flow ? { ...flow, total: flow.buy + flow.sell } : null,
         });
-      }
-    } catch {
-      /* um tempo que falhou não derruba a varredura */
-    }
-  }
 
-  // the one closing soonest is the one that needs a decision first
-  achados.sort((a, b) => a.fecha - b.fecha);
-  state.scan = { achados, quando: Date.now(), tempos: TEMPOS_SCAN.length };
-  state.escaneando = false;
+        if (r.plan && r.plan.side !== "fora") {
+          const aberta = velas[velas.length - 1];
+          achados.push({
+            tf,
+            side: r.plan.side,
+            score: r.score,
+            rr: r.plan.rr,
+            entrada: r.plan.entrada,
+            fecha: aberta.time + (TF_SECONDS[tf] || 60) * 1000,
+          });
+        }
+      } catch {
+        /* um tempo que falhou não derruba a varredura */
+      }
+    }
+
+    // the one closing soonest is the one that needs a decision first
+    achados.sort((a, b) => a.fecha - b.fecha);
+    state.scan = { achados, quando: Date.now(), tempos: TEMPOS_SCAN.length };
+  } finally {
+    // released on every path, including the early return above
+    state.escaneando = false;
+  }
 }
 
 /** Time left on a bar, short enough to sit in a pill. */
@@ -2391,8 +2401,8 @@ buildControls();
 status("", "conectando…");
 start();
 rodarBacktest();
-escanear();
 pullTape();
+setTimeout(escanear, 3000);
 setInterval(pullTape, 20000);
 setInterval(pullSpot, 30000);
 setInterval(pullDeep, DEEP_MS);
