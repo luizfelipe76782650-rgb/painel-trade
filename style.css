@@ -163,12 +163,13 @@ button {
 
 /* ---------- cabeçalho do gráfico ---------- */
 .chart-head {
-  height: 44px;
+  min-height: 44px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 0 14px;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 6px 14px;
   border-bottom: 1px solid #1a2320;
 }
 
@@ -193,9 +194,9 @@ button {
 .hdr {
   display: flex;
   align-items: center;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 8px 12px;
   min-width: 0;
-  overflow: hidden;
 }
 
 .head-right {
