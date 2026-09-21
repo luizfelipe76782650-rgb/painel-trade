@@ -4356,3 +4356,49 @@ body.arrastando * {
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
 }
+
+/* ======================================================================
+   O MASCOTE NÃO PODE COMER O PAINEL
+   ======================================================================
+   He is fixed to the bottom right corner, so whatever scrolls under him stays
+   under him — measured on a 1560px screen he was sitting on top of two whole
+   blocks, Negócios Grandes and Sessão, with the ATR disappearing behind his
+   head. A helper that hides the thing it is helping with is not a helper.
+
+   He fades back when nobody is dealing with him and comes fully forward when
+   pointed at or when he has something to say, which is exactly when covering
+   a little is the right trade. */
+.mascote {
+  opacity: 0.58;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.mascote:hover,
+.mascote:focus-visible,
+.mascote.treme,
+.mascote.pula,
+.mascote.chama {
+  opacity: 1;
+}
+
+/* with something to say he is fully present: that is the moment he matters */
+.mascote:has(.mascote-selo:not([hidden])) {
+  opacity: 1;
+}
+
+/* the pill sat over the panel with the text behind showing through it */
+.dica {
+  backdrop-filter: blur(8px);
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+}
+
+/* and the detail section ends with room, so the last block is never trapped
+   under him when you reach the bottom */
+.deep {
+  padding-bottom: 96px;
+}
+
+@media (min-width: 900px) {
+  .mascote { width: 62px; height: 62px; }
+  .deep { padding-bottom: 104px; }
+}
