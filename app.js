@@ -15,7 +15,7 @@ import {
   varrer,
   volumeProfile,
   zoneStats,
-} from "./analysis.js?v=36";
+} from "./analysis.js?v=37";
 import {
   capacidade,
   choques,
@@ -24,7 +24,7 @@ import {
   monteCarlo,
   riscoDaCarteira,
   volTermo,
-} from "./mesa.js?v=36";
+} from "./mesa.js?v=37";
 import {
   CATEGORIES,
   JANELA,
@@ -39,7 +39,7 @@ import {
   spotGold,
   tape,
   universe,
-} from "./feed.js?v=36";
+} from "./feed.js?v=37";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const el = (id) => document.getElementById(id);
@@ -115,6 +115,7 @@ const state = {
   mesa: null, mesaRodando: false, mesaPasso: null,
   lado: null, ladoRodando: false,
   choque: null, choqueRodando: false,
+  sent: null, sentRodando: false,
   mapa: null,
   mapeando: false,
   mapaPasso: null,
@@ -1560,6 +1561,12 @@ function mountDeep() {
         <div id="fichaBody" class="deep-body"></div>
       </div>
 
+      <div class="card deep-card" id="cardSent">
+        <div class="plan-head"><span class="lbl">SENTIMENTO DO MERCADO</span>
+          <span class="muted" id="sentInfo">—</span></div>
+        <div id="sentBody" class="deep-body"></div>
+      </div>
+
       <div class="card deep-card" id="cardMonte">
         <div class="plan-head"><span class="lbl">MONTE CARLO</span>
           <span class="muted" id="monteInfo">—</span></div>
@@ -1640,7 +1647,7 @@ function mountDeep() {
     </div>`;
 
   ["posSym", "posBody", "perfilInfo", "perfilBody", "placarInfo", "placarBody",
-   "sessaoInfo", "sessaoBody", "btInfo", "btBody", "baleiaInfo", "baleiaBody", "fichaInfo", "fichaBody", "rankInfo", "rankBody", "labInfo", "labBody", "comiteInfo", "comiteBody", "mapaInfo", "mapaBody", "monteInfo", "monteBody", "capInfo", "capBody", "mesaInfo", "mesaBody", "ladoInfo", "ladoBody", "choqueInfo", "choqueBody"].forEach((id) => (R[id] = el(id)));
+   "sessaoInfo", "sessaoBody", "btInfo", "btBody", "baleiaInfo", "baleiaBody", "fichaInfo", "fichaBody", "rankInfo", "rankBody", "labInfo", "labBody", "comiteInfo", "comiteBody", "mapaInfo", "mapaBody", "monteInfo", "monteBody", "capInfo", "capBody", "mesaInfo", "mesaBody", "ladoInfo", "ladoBody", "choqueInfo", "choqueBody", "sentInfo", "sentBody"].forEach((id) => (R[id] = el(id)));
 }
 
 /** A line chart small enough to read as a shape rather than a chart. */
@@ -2722,7 +2729,7 @@ const config = {
     comite: false,
     venderTambem: false,
     taxa: 0.0002,
-    cards: { pos: true, perfil: true, bt: true, monte: true, cap: true, mesa: true, lado: true, choque: true, mapa: true, ficha: true, comite: true, lab: true, rank: true, baleia: true, placar: true, sessao: true },
+    cards: { pos: true, perfil: true, bt: true, sent: true, monte: true, cap: true, mesa: true, lado: true, choque: true, mapa: true, ficha: true, comite: true, lab: true, rank: true, baleia: true, placar: true, sessao: true },
   },
 
   atual: null,
@@ -2796,6 +2803,7 @@ function aplicarConfig() {
   mostra("cardRank", c.cards.rank !== false);
   OPERA.venda = c.venderTambem === true;
 
+  mostra("cardSent", c.cards.sent !== false);
   mostra("cardMonte", c.cards.monte !== false);
   mostra("cardCap", c.cards.cap !== false);
   mostra("cardMesa", c.cards.mesa !== false);
@@ -3711,9 +3719,11 @@ renderCap();
 renderMesa();
 renderLado();
 renderChoque();
+renderSent();
 ligarMascote();
 ligarAba();
 ligarSub();
+ligarVersao();
 ligarConta();
 buildControls();
 aplicarConfig();
@@ -4000,6 +4010,14 @@ const CAMINHOS = [
     linha: "A taxa escolhida entra em toda medição",
     cor: "#8fa39b",
     icone: `<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>`,
+  },
+  {
+    id: "cardSent",
+    titulo: "Sentimento do mercado",
+    conta: "O medo e a ganância de hoje — e o que cada faixa rendeu na semana seguinte.",
+    linha: "992 semanas medidas desde 2018",
+    cor: "#ff9f5c",
+    icone: `<circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0"/><path d="M9 9h.01M15 9h.01"/>`,
   },
   {
     id: "cardMonte",
@@ -4913,4 +4931,200 @@ function renderChoque() {
     "com pelo menos o dobro do volume médio. Preço sem volume é ruído; volume sem preço é " +
     'rodízio.</div><button class="btn largo" id="choqueBotao">procurar de novo</button>');
   el("choqueBotao")?.addEventListener("click", medirChoque);
+}
+
+// ------------------------------------------------------------ versão nova
+/**
+ * Notices when a newer build is published and offers to take it.
+ *
+ * A panel someone paid for should not require them to know what a cache is.
+ * The published page carries its own version in the script tags, so fetching it
+ * past every cache and comparing that string against the one running is enough
+ * to know — and the reload is offered rather than forced, because taking the
+ * screen away from someone mid-trade to install an update is its own bug.
+ */
+const VERSAO_ATUAL = (() => {
+  const s = [...document.scripts].map((x) => x.src).find((x) => x.includes("app.js"));
+  return (s && s.match(/v=(\d+)/) || [])[1] || null;
+})();
+
+async function conferirVersao() {
+  if (!VERSAO_ATUAL) return;
+  try {
+    const r = await fetch("./index.html?t=" + Date.now(), { cache: "no-store" });
+    if (!r.ok) return;
+    const nova = ((await r.text()).match(/app\.js\?v=(\d+)/) || [])[1];
+    if (!nova || nova === VERSAO_ATUAL) return;
+
+    const aviso = el("versaoNova");
+    if (!aviso || !aviso.hidden) return;
+    aviso.hidden = false;
+  } catch {
+    /* sem rede: nada a atualizar */
+  }
+}
+
+function ligarVersao() {
+  el("versaoBotao")?.addEventListener("click", async () => {
+    try {
+      const regs = await navigator.serviceWorker?.getRegistrations?.();
+      await Promise.all((regs || []).map((r) => r.update()));
+      const nomes = await caches?.keys?.();
+      await Promise.all((nomes || []).map((n) => caches.delete(n)));
+    } catch {
+      /* limpar é um bônus; recarregar é o que importa */
+    }
+    location.reload();
+  });
+  el("versaoX")?.addEventListener("click", () => { el("versaoNova").hidden = true; });
+
+  setTimeout(conferirVersao, 6000);
+  setInterval(conferirVersao, 5 * 60 * 1000);
+}
+
+// ---------------------------------------------------------------- sentimento
+/**
+ * The mood of the market, and what it has actually been worth.
+ *
+ * The fear and greed index is quoted everywhere and checked almost nowhere. So
+ * the screen shows today's reading and, beside it, every past reading joined to
+ * what bitcoin did over the following week — 992 of them since 2018. The table
+ * is the point: measured this way, "buy when others are fearful" produced the
+ * WORST forward return of the five bands. Anyone selling this panel can say the
+ * index is here; only this panel says what it was worth.
+ */
+async function medirSentimento() {
+  if (state.sentRodando) return;
+  state.sentRodando = true;
+  renderSent();
+
+  const pega = async (u) => { const r = await fetch(u); return r.ok ? r.json() : null; };
+
+  try {
+    const [fg, alta, velas] = await Promise.all([
+      pega("https://api.alternative.me/fng/?limit=0&format=json"),
+      pega("https://api.coingecko.com/api/v3/search/trending"),
+      history("BTC", "1d", 1000),
+    ]);
+
+    if (!fg || !fg.data || !fg.data.length) {
+      state.sent = { erro: "O índice de medo e ganância não respondeu." };
+      return;
+    }
+
+    const serie = fg.data
+      .map((d) => ({ t: +d.timestamp * 1000, v: +d.value, rot: d.value_classification }))
+      .sort((a, b) => a.t - b.t);
+    const hoje = serie[serie.length - 1];
+
+    // cada leitura contra o que o bitcoin fez na semana seguinte
+    let faixas = null;
+    if (velas && velas.length > 200) {
+      const dia = (t) => new Date(t).toISOString().slice(0, 10);
+      const porDia = new Map(velas.map((v) => [dia(v.time), v.close]));
+      const pares = [];
+      for (const d of serie) {
+        const p0 = porDia.get(dia(d.t));
+        const p1 = porDia.get(dia(d.t + 7 * 864e5));
+        if (p0 && p1) pares.push({ v: d.v, ret: (p1 - p0) / p0 });
+      }
+
+      if (pares.length > 100) {
+        const ord = pares.sort((a, b) => a.v - b.v);
+        const n = Math.floor(ord.length / 5);
+        const nomes = ["medo extremo", "medo", "neutro", "ganância", "ganância extrema"];
+        faixas = [];
+        for (let i = 0; i < 5; i++) {
+          const f = ord.slice(i * n, i === 4 ? ord.length : (i + 1) * n);
+          faixas.push({
+            nome: nomes[i],
+            indice: f.reduce((s, x) => s + x.v, 0) / f.length,
+            retorno: f.reduce((s, x) => s + x.ret, 0) / f.length,
+            subiu: (f.filter((x) => x.ret > 0).length / f.length) * 100,
+            amostras: f.length,
+            atual: hoje.v >= (f[0] ? f[0].v : 0) && hoje.v <= (f[f.length - 1] ? f[f.length - 1].v : 100),
+          });
+        }
+      }
+    }
+
+    state.sent = {
+      hoje,
+      faixas,
+      dias: serie.length,
+      procurados: alta && alta.coins
+        ? alta.coins.slice(0, 7).map((c) => c.item.symbol.toUpperCase())
+        : null,
+    };
+  } catch (err) {
+    state.sent = { erro: err.message };
+  } finally {
+    state.sentRodando = false;
+    renderSent();
+  }
+}
+
+function renderSent() {
+  if (!R.sentBody) return;
+  const s = state.sent;
+  R.sentInfo.textContent = state.sentRodando ? "buscando…" : "mercado cripto";
+
+  if (state.sentRodando) { swap(R.sentBody, "sent", '<div class="vazio">buscando…</div>'); return; }
+
+  if (!s) {
+    swap(R.sentBody, "sent", '<div class="vazio">O índice de medo e ganância aparece em todo ' +
+      'lugar e quase ninguém confere se ele serve para alguma coisa. Aqui ele vem com a conta ' +
+      'feita: cada leitura desde 2018 contra o que o bitcoin fez na semana seguinte.</div>' +
+      '<button class="btn largo" id="sentBotao">ver o sentimento</button>');
+    el("sentBotao")?.addEventListener("click", medirSentimento);
+    return;
+  }
+
+  if (s.erro) {
+    swap(R.sentBody, "sent", '<div class="vazio">' + esc(s.erro) + "</div>" +
+      '<button class="btn largo" id="sentBotao">tentar de novo</button>');
+    el("sentBotao")?.addEventListener("click", medirSentimento);
+    return;
+  }
+
+  const v = s.hoje.v;
+  const col = v >= 75 ? UP : v >= 55 ? "#8fd39f" : v >= 45 ? NEU : v >= 25 ? WARN : DOWN;
+  const rot = { "Extreme Fear": "MEDO EXTREMO", Fear: "MEDO", Neutral: "NEUTRO",
+                Greed: "GANÂNCIA", "Extreme Greed": "GANÂNCIA EXTREMA" }[s.hoje.rot] ||
+              String(s.hoje.rot).toUpperCase();
+
+  const medidor = '<div class="sent-medidor">' +
+    '<div class="sent-num" style="color:' + col + '">' + v + "</div>" +
+    '<div class="sent-rot" style="color:' + col + '">' + rot + "</div>" +
+    '<div class="sent-trilho"><div class="sent-marca" style="left:' + v + '%;background:' + col + '"></div></div>' +
+    '<div class="sent-pontas"><span>0 · medo</span><span>ganância · 100</span></div></div>';
+
+  const tabela = s.faixas
+    ? '<div class="sent-cab"><span>faixa</span><span>índice</span><span>7 dias depois</span>' +
+      "<span>subiu</span></div>" +
+      '<div class="sent-lista">' + s.faixas.map((f) =>
+        '<div class="sent-linha' + (f.atual ? " agora" : "") + '">' +
+        '<span class="sent-nome">' + f.nome + (f.atual ? " ←" : "") + "</span>" +
+        '<span class="m-sub">' + f.indice.toFixed(0) + "</span>" +
+        '<span style="color:' + (f.retorno >= 0 ? UP : DOWN) + '">' +
+        (f.retorno >= 0 ? "+" : "") + (f.retorno * 100).toFixed(2) + "%</span>" +
+        '<span class="m-sub">' + f.subiu.toFixed(0) + "%</span></div>").join("") + "</div>"
+    : '<div class="nota">Sem histórico suficiente para medir as faixas agora.</div>';
+
+  const pior = s.faixas ? s.faixas.reduce((m, f) => (f.retorno < m.retorno ? f : m)) : null;
+  const veredito = pior
+    ? '<div class="mesa-recado">Medido em ' + s.dias.toLocaleString("pt-BR") + ' dias desde 2018, a ' +
+      'faixa de <strong>' + pior.nome + '</strong> foi a que menos rendeu na semana seguinte. ' +
+      "O conselho de comprar quando há medo não aparece nos números — trate este índice como " +
+      "termômetro do humor, nunca como sinal de entrada.</div>"
+    : "";
+
+  const procurados = s.procurados
+    ? '<div class="sent-busca"><span class="m-rot">MAIS PROCURADOS AGORA</span><div class="sent-tags">' +
+      s.procurados.map((t) => '<span class="sent-tag">' + esc(t) + "</span>").join("") + "</div></div>"
+    : "";
+
+  swap(R.sentBody, "sent", medidor + tabela + veredito + procurados +
+    '<button class="btn largo" id="sentBotao">atualizar</button>');
+  el("sentBotao")?.addEventListener("click", medirSentimento);
 }
