@@ -15,7 +15,7 @@ import {
   varrer,
   volumeProfile,
   zoneStats,
-} from "./analysis.js?v=51";
+} from "./analysis.js?v=52";
 import {
   capacidade,
   choques,
@@ -29,7 +29,7 @@ import {
   riscoDaCarteira,
   tendenciaCorrelacao,
   volTermo,
-} from "./mesa.js?v=51";
+} from "./mesa.js?v=52";
 import {
   CATEGORIES,
   JANELA,
@@ -44,7 +44,7 @@ import {
   spotGold,
   tape,
   universe,
-} from "./feed.js?v=51";
+} from "./feed.js?v=52";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const el = (id) => document.getElementById(id);

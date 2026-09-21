@@ -3890,3 +3890,74 @@ body {
 @media (min-width: 900px) {
   .tape-strip::before { width: 54px; }
 }
+
+/* ======================================================================
+   COR ALÉM DO sRGB
+   ======================================================================
+   The greens and reds were already at 91 to 100 percent saturation, which is
+   as far as sRGB goes — there was no room left inside that space. Most screens
+   sold in the last few years show a wider one, and a page only gets it if it
+   asks. These are the same hues pushed to the edge of Display P3, which is
+   visibly deeper on a capable screen and falls back to the sRGB values above
+   on anything else, so nothing breaks either way. */
+@supports (color: color(display-p3 1 1 1)) {
+  :root {
+    --up: color(display-p3 0.05 0.95 0.5);
+    --up-soft: color(display-p3 0.5 1 0.75);
+    --down: color(display-p3 1 0.25 0.4);
+    --down-soft: color(display-p3 1 0.52 0.58);
+    --warn: color(display-p3 1 0.75 0.1);
+    --info: color(display-p3 0.4 0.6 1);
+  }
+}
+
+/* ======================================================================
+   PESO DA LETRA
+   ======================================================================
+   On a dark ground a light stroke is eaten by the background — the same text
+   that looks clean on white looks washed here. Half a step of weight puts the
+   stems back without turning anything bold, and it is the single change that
+   does most for how sharp the panel reads. */
+body {
+  font-weight: 450;
+}
+
+.nota,
+.vazio,
+.cfg-nota,
+.mesa-recado,
+.caminho-conta,
+.inicio-rodape,
+.plan-out,
+.m-sub,
+.part .name {
+  font-weight: 450;
+}
+
+.m-val,
+.tile .v,
+.hero-valor,
+.sent-num,
+.cap-sobra,
+.carrega-val,
+.choque-resumo-val,
+.mc-cel,
+.lbl,
+.m-rot {
+  font-weight: 600;
+}
+
+.book-row,
+.cap-usd,
+.sr-grid {
+  font-weight: 500;
+}
+
+/* a hairline is faint at any density; a quarter pixel more holds the line */
+@media (min-width: 900px) {
+  .part .track { height: 6px; }
+  .carrega-trilho { height: 11px; }
+  .pf-c, .pf-v { height: 9px; }
+  .lado-barra { height: 12px; }
+  .sent-trilho { height: 11px; }
+}
