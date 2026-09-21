@@ -10,7 +10,7 @@ import {
   varrer,
   volumeProfile,
   zoneStats,
-} from "./analysis.js?v=17";
+} from "./analysis.js?v=19";
 import {
   CATEGORIES,
   JANELA,
@@ -25,7 +25,7 @@ import {
   spotGold,
   tape,
   universe,
-} from "./feed.js?v=17";
+} from "./feed.js?v=19";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const el = (id) => document.getElementById(id);
@@ -93,6 +93,12 @@ const state = {
   escaneando: false,
   dicaFechada: null,
   hist: null,
+  ficha: null,
+  fichando: false,
+  fichaPasso: null,
+  ranking: null,
+  rankeando: false,
+  rankingPasso: null,
   bt: null,
   btErro: null,
   varredura: null,
@@ -192,6 +198,12 @@ function digitsFor(price) {
   // below a unit, keep roughly five significant figures: a coin at 0,0000045
   // needs eight decimals before two levels stop reading as the same number
   return Math.min(8, Math.max(4, 4 - Math.floor(Math.log10(price))));
+}
+
+/** Round-trip fee, as a share of the position. */
+function taxaAtual() {
+  const t = config.load().taxa;
+  return typeof t === "number" && t >= 0 ? t : 0.0002;
 }
 
 /** Rewrites a block only when its content actually changed. */
@@ -474,9 +486,12 @@ function reload() {
   shown.price = 0;
   state.scan = null;
   state.dicaFechada = null;
+  state.ficha = null;
   start();
   rodarBacktest();
   escanear();
+  renderFicha();
+  renderRanking();
 }
 
 /** Refills the asset picker for the chosen group, from the live listing. */
@@ -1458,6 +1473,22 @@ function mountDeep() {
         <div id="btBody" class="deep-body"></div>
       </div>
 
+      <div class="card deep-card" id="cardFicha">
+        <div class="plan-head">
+          <span class="lbl">FICHA DO ATIVO</span>
+          <span class="muted" id="fichaInfo">—</span>
+        </div>
+        <div id="fichaBody" class="deep-body"></div>
+      </div>
+
+      <div class="card deep-card" id="cardRank">
+        <div class="plan-head">
+          <span class="lbl">RANKING DOS ATIVOS</span>
+          <span class="muted" id="rankInfo">—</span>
+        </div>
+        <div id="rankBody" class="deep-body"></div>
+      </div>
+
       <div class="card deep-card" id="cardBaleia">
         <div class="plan-head">
           <span class="lbl">NEGÓCIOS GRANDES</span>
@@ -1476,7 +1507,7 @@ function mountDeep() {
     </div>`;
 
   ["posSym", "posBody", "perfilInfo", "perfilBody", "placarInfo", "placarBody",
-   "sessaoInfo", "sessaoBody", "btInfo", "btBody", "baleiaInfo", "baleiaBody"].forEach((id) => (R[id] = el(id)));
+   "sessaoInfo", "sessaoBody", "btInfo", "btBody", "baleiaInfo", "baleiaBody", "fichaInfo", "fichaBody", "rankInfo", "rankBody"].forEach((id) => (R[id] = el(id)));
 }
 
 /** A line chart small enough to read as a shape rather than a chart. */
@@ -1839,6 +1870,7 @@ async function rodarBacktest() {
         depth: state.depth,
         zoneLimit: state.zones,
         flowBars: FLOW_BARS[state.timeframe] || 12,
+        taxa: taxaAtual(),
       });
       if (!state.bt) state.btErro = "Histórico curto demais para medir.";
     }
@@ -1882,6 +1914,7 @@ function aplicarMelhor() {
     depth: state.depth,
     zoneLimit: state.zones,
     flowBars: FLOW_BARS[state.timeframe] || 12,
+    taxa: taxaAtual(),
   });
   renderBacktest();
 }
@@ -1958,8 +1991,20 @@ function renderBacktest() {
       <div class="metrica"><span class="m-rot">RESULTADO</span>
         <span class="m-val" style="color:${corR}">${bt.r >= 0 ? "+" : ""}${bt.r.toFixed(1)}R</span></div>
       <div class="metrica"><span class="m-rot">POR OPERAÇÃO</span>
-        <span class="m-val" style="color:${corR}">${media >= 0 ? "+" : ""}${media.toFixed(2)}R</span></div>
+        <span class="m-val" style="color:${corR}">${media >= 0 ? "+" : ""}${media.toFixed(
+          3
+        )}R</span>
+        <span class="m-sub">já com taxa</span></div>
     </div>
+
+    ${
+      bt.custoMedio > 0.25
+        ? `<div class="alerta">A taxa consome <b>${bt.custoMedio.toFixed(
+            2
+          )}R</b> de cada operação neste tempo gráfico. O stop fica perto demais do preço
+           para a corretagem caber — num tempo maior o mesmo sinal paga muito menos.</div>`
+        : `<div class="nota">Taxa cobrada: ${bt.custoMedio.toFixed(3)}R por operação.</div>`
+    }
 
     <div class="spark-box">
       <span class="m-rot">CURVA DE RESULTADO</span>
@@ -1968,9 +2013,10 @@ function renderBacktest() {
 
     ${grade}
 
-    <div class="nota">Simulação sobre as barras já fechadas, com os controles atuais.
-      Sem taxa e sem deslize, e uma barra que toca alvo e stop conta como stop — não
-      há como saber qual veio primeiro. Serve para calibrar, não para provar.</div>`
+    <div class="nota">Simulação sobre as barras já fechadas, com os controles atuais e a
+      corretagem escolhida nas configurações. Sem deslize, e uma barra que toca alvo e
+      stop conta como stop — não há como saber qual veio primeiro. Serve para calibrar,
+      não para provar.</div>`
   );
 
   el("btOtimizar")?.addEventListener("click", otimizar);
@@ -2507,7 +2553,8 @@ const config = {
     mostrarMascote: true,
     mostrarDica: true,
     som: true,
-    cards: { pos: true, perfil: true, bt: true, baleia: true, placar: true, sessao: true },
+    taxa: 0.0002,
+    cards: { pos: true, perfil: true, bt: true, ficha: true, rank: true, baleia: true, placar: true, sessao: true },
   },
 
   atual: null,
@@ -2577,6 +2624,8 @@ function aplicarConfig() {
   mostra("cardPos", c.cards.pos);
   mostra("cardPerfil", c.cards.perfil);
   mostra("cardBt", c.cards.bt);
+  mostra("cardFicha", c.cards.ficha !== false);
+  mostra("cardRank", c.cards.rank !== false);
   mostra("cardBaleia", c.cards.baleia);
   mostra("cardPlacar", c.cards.placar);
   mostra("cardSessao", c.cards.sessao);
@@ -2630,10 +2679,13 @@ function abrirConfig() {
   marcar("cfgMascote", c.mostrarMascote);
   marcar("cfgDica", c.mostrarDica);
   marcar("cfgSom", c.som);
+  el("cfgTaxa").value = String(c.taxa);
   el("cfgVozEstado").textContent = voz.estado();
   marcar("cfgCardPos", c.cards.pos);
   marcar("cfgCardPerfil", c.cards.perfil);
   marcar("cfgCardBt", c.cards.bt);
+  marcar("cfgCardFicha", c.cards.ficha !== false);
+  marcar("cfgCardRank", c.cards.rank !== false);
   marcar("cfgCardBaleia", c.cards.baleia);
   marcar("cfgCardPlacar", c.cards.placar);
   marcar("cfgCardSessao", c.cards.sessao);
@@ -2653,10 +2705,13 @@ function salvarConfig() {
     mostrarMascote: el("cfgMascote").checked,
     mostrarDica: el("cfgDica").checked,
     som: el("cfgSom").checked,
+    taxa: parseFloat(el("cfgTaxa").value),
     cards: {
       pos: el("cfgCardPos").checked,
       perfil: el("cfgCardPerfil").checked,
       bt: el("cfgCardBt").checked,
+      ficha: el("cfgCardFicha").checked,
+      rank: el("cfgCardRank").checked,
       baleia: el("cfgCardBaleia").checked,
       placar: el("cfgCardPlacar").checked,
       sessao: el("cfgCardSessao").checked,
@@ -2966,6 +3021,362 @@ document.addEventListener(
   { passive: true }
 );
 
+// ---------------------------------------------------------------- ficha
+const ZONAS_FICHA = [0.3, 0.5, 0.8];
+const NIVEIS_FICHA = [4, 6, 9];
+const VELAS_FICHA = 3000;
+
+/** Lets the screen breathe between measurements, which each take a moment. */
+const respirar = () => new Promise((ok) => setTimeout(ok, 0));
+
+/**
+ * Measures one asset on its own terms.
+ *
+ * Settings are swept over the first half of its history and then judged on the
+ * second half, which the sweep never saw. Only a profile that beat the default
+ * on that untouched half — and made money after fees — is reported as usable.
+ */
+async function montarFicha() {
+  if (state.fichando) return;
+  state.fichando = true;
+  state.ficha = null;
+  state.fichaPasso = "buscando histórico";
+  renderFicha();
+
+  try {
+    const velas = await history(state.symbol, state.timeframe, VELAS_FICHA);
+    const uteis = (velas?.length || 0) - JANELA;
+
+    if (!velas || uteis < 600) {
+      state.ficha = { erro: "Histórico curto demais para separar calibragem de prova." };
+      return;
+    }
+
+    const corte = Math.floor(uteis / 2) + JANELA;
+    const primeira = velas.slice(0, corte);
+    const segunda = velas.slice(corte - JANELA);
+    const comum = { flowBars: FLOW_BARS[state.timeframe] || 12, janela: JANELA, taxa: taxaAtual() };
+
+    let melhor = null;
+    let feitos = 0;
+    const totalCombos = ZONAS_FICHA.length * NIVEIS_FICHA.length;
+
+    for (const depth of ZONAS_FICHA) {
+      for (const zoneLimit of NIVEIS_FICHA) {
+        state.fichaPasso = `calibrando ${++feitos} de ${totalCombos}`;
+        renderFicha();
+        await respirar();
+
+        const bt = backtest(primeira, { ...comum, depth, zoneLimit });
+        if (bt && bt.total >= 6 && (!melhor || bt.porOp > melhor.bt.porOp)) {
+          melhor = { depth, zoneLimit, bt };
+        }
+      }
+    }
+
+    if (!melhor) {
+      state.ficha = { erro: "Operações demais de menos na calibragem para concluir algo." };
+      return;
+    }
+
+    state.fichaPasso = "provando fora da amostra";
+    renderFicha();
+    await respirar();
+
+    const fora = backtest(segunda, { ...comum, depth: melhor.depth, zoneLimit: melhor.zoneLimit });
+    await respirar();
+    const padrao = backtest(segunda, { ...comum, depth: 0.5, zoneLimit: 6 });
+
+    state.ficha = {
+      symbol: state.symbol,
+      timeframe: state.timeframe,
+      depth: melhor.depth,
+      zoneLimit: melhor.zoneLimit,
+      dentro: melhor.bt,
+      fora,
+      padrao,
+      aprovado: !!fora && !!padrao && fora.porOp > padrao.porOp && fora.porOp > 0,
+    };
+  } catch (err) {
+    state.ficha = { erro: err.message };
+  } finally {
+    state.fichando = false;
+    state.fichaPasso = null;
+    renderFicha();
+  }
+}
+
+function usarPerfil() {
+  const fi = state.ficha;
+  if (!fi?.aprovado) return;
+
+  state.depth = fi.depth;
+  state.zones = fi.zoneLimit;
+  el("depth").value = fi.depth;
+  el("zones").value = fi.zoneLimit;
+  el("depthVal").textContent = fi.depth;
+  el("zonesVal").textContent = fi.zoneLimit;
+  lastAnalysis = 0;
+  rodarBacktest();
+}
+
+function renderFicha() {
+  const ativo = state.symbol.replace(/^f:/, "");
+  R.fichaInfo.textContent = state.ficha?.symbol ? `${ativo} · ${state.ficha.timeframe}` : "—";
+
+  if (state.fichando) {
+    swap(R.fichaBody, "ficha", `<div class="vazio">${esc(state.fichaPasso || "medindo")}…</div>`);
+    return;
+  }
+
+  const fi = state.ficha;
+
+  if (!fi) {
+    swap(
+      R.fichaBody,
+      "ficha",
+      `<div class="vazio">Cada ativo se comporta de um jeito. A ficha varre os ajustes
+        na primeira metade do histórico e julga na segunda, que a varredura nunca viu —
+        com taxa cobrada. Se o perfil não vencer o padrão nessa metade intocada, ele é
+        reprovado.</div>
+      <button class="btn largo" id="fichaBotao">montar a ficha de ${esc(ativo)}</button>`
+    );
+    el("fichaBotao")?.addEventListener("click", montarFicha);
+    return;
+  }
+
+  if (fi.erro) {
+    swap(
+      R.fichaBody,
+      "ficha",
+      `<div class="vazio">${esc(fi.erro)}</div>
+       <button class="btn largo" id="fichaBotao">tentar de novo</button>`
+    );
+    el("fichaBotao")?.addEventListener("click", montarFicha);
+    return;
+  }
+
+  const cor = (v) => (v > 0 ? UP : v < 0 ? DOWN : NEU);
+  const num = (v) => `${v >= 0 ? "+" : ""}${v.toFixed(3)}R`;
+
+  swap(
+    R.fichaBody,
+    "ficha",
+    `<div class="veredito ${fi.aprovado ? "bom" : "ruim"}">
+       ${fi.aprovado ? "PERFIL APROVADO" : "PERFIL REPROVADO"}
+     </div>
+
+     <div class="metricas">
+       <div class="metrica"><span class="m-rot">PERFIL</span>
+         <span class="m-val">${fi.depth}× · ${fi.zoneLimit}</span>
+         <span class="m-sub">zona e níveis</span></div>
+       <div class="metrica"><span class="m-rot">CALIBRAGEM</span>
+         <span class="m-val" style="color:${cor(fi.dentro.porOp)}">${num(fi.dentro.porOp)}</span>
+         <span class="m-sub">${fi.dentro.total} operações</span></div>
+       <div class="metrica"><span class="m-rot">FORA DA AMOSTRA</span>
+         <span class="m-val" style="color:${cor(fi.fora.porOp)}">${num(fi.fora.porOp)}</span>
+         <span class="m-sub">${fi.fora.total} operações</span></div>
+       <div class="metrica"><span class="m-rot">PADRÃO ALI</span>
+         <span class="m-val" style="color:${cor(fi.padrao.porOp)}">${num(fi.padrao.porOp)}</span>
+         <span class="m-sub">${fi.padrao.total} operações</span></div>
+     </div>
+
+     <div class="cfg-linha">
+       <span class="cfg-texto">Taxa comeu <b>${fi.fora.custoMedio.toFixed(3)}R</b> por operação</span>
+       ${fi.aprovado ? `<button class="btn mini-btn" id="fichaUsar">usar este perfil</button>` : ""}
+     </div>
+
+     <div class="nota">${
+       fi.aprovado
+         ? `Na metade que a calibragem nunca viu, este perfil rendeu ${num(
+             fi.fora.porOp
+           )} por operação contra ${num(fi.padrao.porOp)} do padrão. É o mínimo para levar a sério — não é garantia.`
+         : `Na metade intocada ele rendeu ${num(fi.fora.porOp)} contra ${num(
+             fi.padrao.porOp
+           )} do padrão. O que parecia ajuste era o passado sendo decorado. Não use este perfil.`
+     }</div>`
+  );
+
+  el("fichaUsar")?.addEventListener("click", usarPerfil);
+}
+
+// ---------------------------------------------------------------- ranking
+/**
+ * The same profile, run across a whole category.
+ *
+ * Reading one asset at a time never answers the question that matters — where
+ * does this reading work at all. Each asset is calibrated on its own first
+ * half and judged on its own second half, fees charged, and the result is
+ * cached so an answer this slow is only paid for once.
+ */
+const RANKING_MAX = 24;
+
+const rankingCache = {
+  chave: (cat, tf) => `painel:ranking:${cat}:${tf}:${taxaAtual()}`,
+
+  load(cat, tf) {
+    try {
+      const cru = localStorage.getItem(rankingCache.chave(cat, tf));
+      return cru ? JSON.parse(cru) : null;
+    } catch {
+      return null;
+    }
+  },
+
+  save(cat, tf, lista) {
+    try {
+      localStorage.setItem(
+        rankingCache.chave(cat, tf),
+        JSON.stringify({ quando: Date.now(), lista })
+      );
+    } catch {
+      /* cabe na memória mesmo que não caiba no disco */
+    }
+  },
+};
+
+async function medirCategoria() {
+  if (state.rankeando) return;
+
+  const grupo = CATEGORIES.find((c) => c.id === state.category);
+  const todos = await universe();
+  const lista = (grupo?.assets
+    ? grupo.assets.map((id) => todos.find((x) => x.id === id)).filter(Boolean)
+    : todos.filter((x) => (grupo?.todos === "futuros") === x.id.startsWith("f:"))
+  ).slice(0, RANKING_MAX);
+
+  if (!lista.length) return;
+
+  state.rankeando = true;
+  state.ranking = { lista: [], cat: state.category, tf: state.timeframe };
+  const comum = { flowBars: FLOW_BARS[state.timeframe] || 12, janela: JANELA, taxa: taxaAtual() };
+
+  for (let i = 0; i < lista.length; i++) {
+    const ativo = lista[i];
+    state.rankingPasso = `${i + 1} de ${lista.length} · ${ativo.label}`;
+    renderRanking();
+    await respirar();
+
+    try {
+      const velas = await history(ativo.id, state.timeframe, 3000);
+      if (!velas || velas.length - JANELA < 600) continue;
+
+      const uteis = velas.length - JANELA;
+      const corte = Math.floor(uteis / 2) + JANELA;
+      const primeira = velas.slice(0, corte);
+      const segunda = velas.slice(corte - JANELA);
+
+      let melhor = null;
+      for (const depth of ZONAS_FICHA) {
+        for (const zoneLimit of NIVEIS_FICHA) {
+          await respirar();
+          const bt = backtest(primeira, { ...comum, depth, zoneLimit });
+          if (bt && bt.total >= 6 && (!melhor || bt.porOp > melhor.bt.porOp)) {
+            melhor = { depth, zoneLimit, bt };
+          }
+        }
+      }
+      if (!melhor) continue;
+
+      await respirar();
+      const fora = backtest(segunda, { ...comum, depth: melhor.depth, zoneLimit: melhor.zoneLimit });
+      await respirar();
+      const padrao = backtest(segunda, { ...comum, depth: 0.5, zoneLimit: 6 });
+      if (!fora || !padrao) continue;
+
+      state.ranking.lista.push({
+        id: ativo.id,
+        label: ativo.label,
+        depth: melhor.depth,
+        zoneLimit: melhor.zoneLimit,
+        fora: fora.porOp,
+        ops: fora.total,
+        acerto: fora.taxa,
+        padrao: padrao.porOp,
+        custo: fora.custoMedio,
+        ok: fora.porOp > padrao.porOp && fora.porOp > 0,
+      });
+      state.ranking.lista.sort((x, y) => y.fora - x.fora);
+    } catch {
+      /* um ativo que falhou não derruba a lista */
+    }
+  }
+
+  rankingCache.save(state.category, state.timeframe, state.ranking.lista);
+  state.rankeando = false;
+  state.rankingPasso = null;
+  renderRanking();
+}
+
+function renderRanking() {
+  const grupo = CATEGORIES.find((c) => c.id === state.category);
+  R.rankInfo.textContent = grupo ? `${grupo.label} · ${state.timeframe}` : "—";
+
+  const guardado =
+    state.ranking?.cat === state.category && state.ranking?.tf === state.timeframe
+      ? state.ranking.lista
+      : rankingCache.load(state.category, state.timeframe)?.lista;
+
+  const cor = (v) => (v > 0 ? UP : v < 0 ? DOWN : NEU);
+  const num = (v) => `${v >= 0 ? "+" : ""}${v.toFixed(3)}R`;
+
+  const linhas = (guardado || [])
+    .map(
+      (l, i) => `<div class="rank-linha ${l.ok ? "ok" : ""}" data-id="${esc(l.id)}">
+        <span class="rank-pos">${l.ok ? "✓" : i + 1}</span>
+        <span class="rank-nome">${esc(l.label)}</span>
+        <span class="rank-perfil">${l.depth}× ${l.zoneLimit}</span>
+        <span class="rank-ops">${l.ops}op ${l.acerto.toFixed(0)}%</span>
+        <span class="rank-r" style="color:${cor(l.fora)}">${num(l.fora)}</span>
+        <span class="rank-custo">${l.custo.toFixed(3)}R</span>
+      </div>`
+    )
+    .join("");
+
+  const aprovados = (guardado || []).filter((l) => l.ok).length;
+  const media = guardado?.length
+    ? guardado.reduce((s, l) => s + l.fora, 0) / guardado.length
+    : 0;
+
+  const corpo = state.rankeando
+    ? `<div class="vazio">medindo ${esc(state.rankingPasso || "")}… cada ativo leva alguns
+        segundos, e o resultado fica guardado.</div>${linhas ? `<div class="rank">${linhas}</div>` : ""}`
+    : guardado?.length
+      ? `<div class="rank-cab">
+           <span></span><span>ativo</span><span>perfil</span><span>ops</span>
+           <span>fora da amostra</span><span>custo</span>
+         </div>
+         <div class="rank">${linhas}</div>
+         <div class="metricas">
+           <div class="metrica"><span class="m-rot">APROVADOS</span>
+             <span class="m-val">${aprovados} de ${guardado.length}</span></div>
+           <div class="metrica"><span class="m-rot">MÉDIA DO GRUPO</span>
+             <span class="m-val" style="color:${cor(media)}">${num(media)}</span></div>
+         </div>
+         <div class="nota">Se os perfis fossem acaso, cerca de um quarto passaria por
+           sorte. Uma aprovação perto disso não é sinal de que o ativo é bom — é o que a
+           moeda daria sozinha. O que vale de verdade aqui é o <b>custo</b>, que é
+           geometria e não sorte, e os ativos consistentemente negativos.</div>
+         <button class="btn largo" id="rankBotao">medir de novo</button>`
+      : `<div class="vazio">Mede todos os ativos da categoria aberta: calibra cada um na
+          primeira metade do próprio histórico e julga na segunda, com taxa. Demora alguns
+          minutos e fica guardado.</div>
+         <button class="btn largo" id="rankBotao">medir ${esc(grupo?.label || "")}</button>`;
+
+  swap(R.rankBody, "rank", corpo);
+
+  el("rankBotao")?.addEventListener("click", medirCategoria);
+  R.rankBody.querySelectorAll(".rank-linha").forEach((n) =>
+    n.addEventListener("click", () => {
+      const id = n.dataset.id;
+      if (!id || id === state.symbol) return;
+      state.symbol = id;
+      el("symbol").value = id;
+      reload();
+    })
+  );
+}
+
 // ---------------------------------------------------------------- start
 const cfgInicial = config.load();
 state.symbol = cfgInicial.ativo;
@@ -2973,6 +3384,8 @@ state.timeframe = cfgInicial.tempo;
 
 mount();
 mountDeep();
+renderFicha();
+renderRanking();
 ligarMascote();
 ligarConta();
 buildControls();

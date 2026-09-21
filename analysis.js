@@ -414,7 +414,7 @@ export function buildPlan(price, a, score, sup, res, zones = []) {
 export function backtest(candles, opts = {}) {
   // the window has to match the one the live panel reads, or this measures a
   // strategy nobody is running
-  const { depth = 0.5, zoneLimit = 6, flowBars = 18, janela = 400 } = opts;
+  const { depth = 0.5, zoneLimit = 6, flowBars = 18, janela = 400, taxa = 0 } = opts;
   const warmup = janela;
 
   if (candles.length < warmup + 40) return null;
@@ -423,6 +423,7 @@ export function backtest(candles, opts = {}) {
   const curva = [];
   let aberta = null;
   let r = 0;
+  let custos = 0;
 
   for (let i = warmup; i < candles.length; i++) {
     const vista = candles.slice(Math.max(0, i - janela), i);
@@ -432,8 +433,27 @@ export function backtest(candles, opts = {}) {
       aberta.stop = fim.stop;
 
       if (fim.resultado) {
-        r += fim.r;
-        operacoes.push({ ...aberta, resultado: fim.resultado, r: fim.r, fim: fim.fim });
+        /**
+         * A round trip costs a share of the position, while the result is
+         * measured against the distance to the stop. So the cost in R is the
+         * fee divided by how far the stop sits: a tight stop pays far more of
+         * its own risk to the exchange, and ignoring that flatters every
+         * short-timeframe result.
+         */
+        const riscoPct = Math.abs(aberta.entrada - aberta.stopInicial) / aberta.entrada;
+        const custo = riscoPct > 0 ? taxa / riscoPct : 0;
+        const liquido = fim.r - custo;
+
+        r += liquido;
+        custos += custo;
+        operacoes.push({
+          ...aberta,
+          resultado: liquido > 0 ? fim.resultado : fim.resultado === "alvo" ? "alvo" : fim.resultado,
+          r: liquido,
+          bruto: fim.r,
+          custo,
+          fim: fim.fim,
+        });
         curva.push(r);
         aberta = null;
       }
@@ -460,6 +480,7 @@ export function backtest(candles, opts = {}) {
 
   const alvos = operacoes.filter((o) => o.resultado === "alvo").length;
   const empates = operacoes.filter((o) => o.resultado === "empate").length;
+  const ganhos = operacoes.filter((o) => o.r > 0).length;
 
   return {
     operacoes,
@@ -468,8 +489,10 @@ export function backtest(candles, opts = {}) {
     alvos,
     empates,
     stops: operacoes.length - alvos - empates,
-    taxa: operacoes.length ? (alvos / operacoes.length) * 100 : 0,
+    taxa: operacoes.length ? (ganhos / operacoes.length) * 100 : 0,
     r,
+    porOp: operacoes.length ? r / operacoes.length : 0,
+    custoMedio: operacoes.length ? custos / operacoes.length : 0,
     barras: candles.length - warmup,
   };
 }
@@ -577,4 +600,61 @@ export function acompanharStop(t, candles, a, pivos) {
   }
 
   return { stop, empatou, movimentos, resultado: null, r: null };
+}
+
+/**
+ * Builds an asset's profile.
+ *
+ * The settings are swept over the first half of its history and then judged on
+ * the second half, which the sweep never saw. A profile is only reported as
+ * usable when it beat the default settings on that untouched half — otherwise
+ * what looks like a tuned edge is just the shape of the past being memorised.
+ *
+ * Fees are charged throughout, because a profile that only works for free is
+ * not a profile.
+ */
+export function calibrar(candles, opts = {}) {
+  const {
+    flowBars = 12,
+    janela = 400,
+    taxa = 0.0002,
+    zonas = [0.3, 0.5, 0.8, 1.2],
+    niveis = [4, 6, 9],
+    minimo = 8,
+  } = opts;
+
+  const uteis = candles.length - janela;
+  if (uteis < 600) return null;
+
+  const corte = Math.floor(uteis / 2) + janela;
+  const primeira = candles.slice(0, corte);
+  const segunda = candles.slice(corte - janela); // mantém o aquecimento
+
+  const comum = { flowBars, janela, taxa };
+
+  let melhor = null;
+  for (const depth of zonas) {
+    for (const zoneLimit of niveis) {
+      const bt = backtest(primeira, { ...comum, depth, zoneLimit });
+      if (!bt || bt.total < minimo) continue;
+      if (!melhor || bt.porOp > melhor.bt.porOp) melhor = { depth, zoneLimit, bt };
+    }
+  }
+
+  if (!melhor) return { suficiente: false };
+
+  const fora = backtest(segunda, { ...comum, depth: melhor.depth, zoneLimit: melhor.zoneLimit });
+  const padrao = backtest(segunda, { ...comum, depth: 0.5, zoneLimit: 6 });
+
+  return {
+    suficiente: true,
+    depth: melhor.depth,
+    zoneLimit: melhor.zoneLimit,
+    dentro: melhor.bt,
+    fora,
+    padrao,
+    // two conditions, both necessary: it must beat the default on ground it
+    // never saw, and it must actually make money after costs
+    aprovado: !!fora && !!padrao && fora.porOp > padrao.porOp && fora.porOp > 0,
+  };
 }

@@ -21,7 +21,7 @@
     <link rel="apple-touch-icon" href="./icone.svg" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <link rel="stylesheet" href="./style.css?v=17" />
+    <link rel="stylesheet" href="./style.css?v=19" />
   </head>
   <body>
     <div class="app">
@@ -178,12 +178,33 @@
               <span>Perfil de volume</span></label>
             <label class="cfg-opcao"><input type="checkbox" id="cfgCardBt" />
               <span>Medição da estratégia</span></label>
+            <label class="cfg-opcao"><input type="checkbox" id="cfgCardFicha" />
+              <span>Ficha do ativo</span></label>
+            <label class="cfg-opcao"><input type="checkbox" id="cfgCardRank" />
+              <span>Ranking dos ativos</span></label>
             <label class="cfg-opcao"><input type="checkbox" id="cfgCardBaleia" />
               <span>Negócios grandes</span></label>
             <label class="cfg-opcao"><input type="checkbox" id="cfgCardPlacar" />
               <span>Placar das operações</span></label>
             <label class="cfg-opcao"><input type="checkbox" id="cfgCardSessao" />
               <span>Sessão</span></label>
+          </section>
+
+          <section class="cfg-bloco">
+            <span class="cfg-rotulo">CORRETAGEM</span>
+            <div class="cfg-linha">
+              <span class="cfg-texto">Taxa de ida e volta</span>
+              <select class="mini" id="cfgTaxa">
+                <option value="0">sem taxa</option>
+                <option value="0.0002">0,02% — ordem limitada</option>
+                <option value="0.0005">0,05%</option>
+                <option value="0.001">0,10% — ordem a mercado</option>
+                <option value="0.002">0,20%</option>
+              </select>
+            </div>
+            <p class="cfg-nota">Toda medição do painel desconta isso. Num stop curto a
+              taxa pode custar mais do que o próprio risco da operação — é o que decide
+              se a estratégia se paga.</p>
           </section>
 
           <section class="cfg-bloco">
@@ -221,6 +242,6 @@
       <div class="balao-lista" id="balaoLista"></div>
     </div>
 
-    <script type="module" src="./app.js?v=17"></script>
+    <script type="module" src="./app.js?v=19"></script>
   </body>
 </html>

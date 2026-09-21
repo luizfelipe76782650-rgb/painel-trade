@@ -724,19 +724,59 @@ export async function history(symbolId, timeframe, limit = 1000) {
   if (!futuro && active && active !== binance) return null;
 
   const base = futuro ? FAPI : "https://api.binance.com/api/v3";
-  const raw = await getJson(`${base}/klines?symbol=${sym}&interval=${timeframe}&limit=${limit}`);
+  const passo = 1000; // teto por chamada nas duas bolsas
+  const ms = (TF_SECONDS[timeframe] || 60) * 1000;
 
-  return raw.map((k) => {
-    const volume = +k[5];
-    const buy = +k[9];
-    return {
-      time: k[0],
-      open: +k[1],
-      high: +k[2],
-      low: +k[3],
-      close: +k[4],
-      volume,
-      delta: buy - (volume - buy),
-    };
-  });
+  const converter = (raw) =>
+    raw.map((k) => {
+      const volume = +k[5];
+      const buy = +k[9];
+      return {
+        time: k[0],
+        open: +k[1],
+        high: +k[2],
+        low: +k[3],
+        close: +k[4],
+        volume,
+        delta: buy - (volume - buy),
+      };
+    });
+
+  if (limit <= passo) {
+    return converter(
+      await getJson(`${base}/klines?symbol=${sym}&interval=${timeframe}&limit=${limit}`)
+    );
+  }
+
+  /**
+   * Longer runs are walked backwards a page at a time.
+   *
+   * A measurement is only as trustworthy as the number of trades behind it,
+   * and one page of candles rarely holds enough of them. Each page asks for
+   * what came before the oldest bar already held, and the walk stops early if
+   * the exchange runs out of history.
+   */
+  const tudo = [];
+  let fim = Date.now();
+
+  while (tudo.length < limit) {
+    const pagina = converter(
+      await getJson(
+        `${base}/klines?symbol=${sym}&interval=${timeframe}&limit=${passo}&endTime=${fim}`
+      )
+    );
+    if (!pagina.length) break;
+
+    tudo.unshift(...pagina);
+    if (pagina.length < passo) break;
+
+    fim = pagina[0].time - ms;
+  }
+
+  // páginas podem se sobrepor numa vela; uma data, uma barra
+  const vistos = new Set();
+  return tudo
+    .filter((c) => (vistos.has(c.time) ? false : vistos.add(c.time)))
+    .sort((a, b) => a.time - b.time)
+    .slice(-limit);
 }
