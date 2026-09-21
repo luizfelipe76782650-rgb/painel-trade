@@ -3837,32 +3837,33 @@ body {
 /* ======================================================================
    LUGAR PARA O BOTÃO DE INÍCIO
    ======================================================================
-   The home button floats fixed at the top left corner, and the price tape runs
-   the full width of that same corner — so the button sat on the prices and the
-   first ticker of the strip disappeared underneath it. Measured: the button
-   occupies 16 to 60 pixels across and 16 to 60 down; the tape runs from 10 to
-   24 starting at zero.
+   The button floats over the top left corner, and two things already live
+   there: the price tape across the whole width, and the first card of the left
+   column right beneath it. Sitting on the tape hid the first ticker; dropping
+   below the tape covered the word CONFLUÊNCIA.
 
-   The strip gets a gutter the width of the button so nothing ever passes under
-   it, and the button drops just below the strip so the corner is shared rather
-   than fought over. */
+   So it moves into the tape bar itself, sized to fit inside those 34 pixels,
+   with the strip carrying a gutter exactly its width. The corner is shared
+   instead of fought over, and nothing below is touched. */
 .tape-strip {
-  padding-left: 62px;
+  padding-left: 40px;
 }
 
 .aba-btn {
-  top: calc(30px + env(safe-area-inset-top, 0px));
-  width: 40px;
-  height: 40px;
-  left: 12px;
+  top: calc(3px + env(safe-area-inset-top, 0px));
+  left: 9px;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+}
+
+.aba-btn svg {
+  width: 13px;
+  height: 13px;
 }
 
 @media (min-width: 900px) {
-  .tape-strip { padding-left: 74px; }
-  .aba-btn { width: 46px; height: 46px; left: 16px; }
-}
-
-/* the mascot's own corner, so the two never crowd the same edge */
-@media (max-width: 420px) {
-  .tape-strip { padding-left: 56px; }
+  .tape-strip { padding-left: 54px; }
+  .aba-btn { width: 30px; height: 30px; left: 11px; top: calc(2px + env(safe-area-inset-top, 0px)); }
+  .aba-btn svg { width: 17px; height: 17px; }
 }
