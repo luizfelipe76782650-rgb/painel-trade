@@ -191,12 +191,18 @@ button {
   padding: 0 6px;
 }
 
+/**
+ * A flex item shrinks before its parent wraps, and with min-width 0 this one
+ * collapsed to nothing instead of moving to the next line. The basis gives it
+ * a width worth keeping, so the row breaks rather than squeezing the price out.
+ */
 .hdr {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px 12px;
-  min-width: 0;
+  flex: 1 1 300px;
+  min-width: 250px;
 }
 
 .head-right {
