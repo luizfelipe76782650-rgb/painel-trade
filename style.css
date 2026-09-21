@@ -2872,3 +2872,181 @@ button {
 @media (prefers-reduced-motion: reduce) {
   .sub { animation: none; }
 }
+
+/* ------------------------------------------------------------------ mesa
+   A grid of cells read as a heat map: colour carries the answer, the number
+   confirms it. Rows label themselves so the grid works without a legend. */
+.mc-grade {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.mc-linha {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.mc-rot {
+  flex: 0 0 46px;
+  font-size: 10.5px;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.mc-tf,
+.mc-cel {
+  flex: 1 1 0;
+  min-width: 42px;
+  text-align: center;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.mc-tf {
+  color: var(--dim);
+  letter-spacing: 0.05em;
+  padding-bottom: 2px;
+}
+
+.mc-cel {
+  padding: 7px 2px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.mc-cel:hover { border-color: var(--muted); }
+.mc-cel.viva { border-color: #14b8a6; }
+
+.mc-detalhe {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.mc-tit {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+/* the sentence that states what the table just showed */
+.mesa-recado {
+  margin: 10px 0;
+  padding: 9px 11px;
+  border-left: 3px solid #14b8a6;
+  border-radius: 0 8px 8px 0;
+  background: var(--panel-2);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.mesa-recado strong { color: var(--text); }
+
+/* ------------------------------------------------------------ capacidade */
+.cap-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 10px;
+}
+
+.cap-linha {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 8px;
+  align-items: baseline;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--panel-2);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cap-custo { color: var(--dim); font-size: 11px; }
+.cap-sobra { font-weight: 600; text-align: right; }
+
+/* ------------------------------------------------------ quem está do lado */
+.lado-linha {
+  display: grid;
+  grid-template-columns: 108px 1fr auto;
+  gap: 9px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.lado-rot {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--dim);
+}
+
+.lado-barra {
+  height: 10px;
+  border-radius: 5px;
+  background: var(--line-soft);
+  overflow: hidden;
+}
+
+.lado-fill {
+  height: 100%;
+  border-radius: 5px;
+  transition: width 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.lado-val {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- choques */
+.choque-cab,
+.choque-linha {
+  display: grid;
+  grid-template-columns: 1fr 78px 1fr 92px;
+  gap: 8px;
+  align-items: baseline;
+  font-variant-numeric: tabular-nums;
+}
+
+.choque-cab {
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dim);
+  padding: 0 8px 4px;
+}
+
+.choque-lista { display: flex; flex-direction: column; gap: 2px; }
+
+.choque-linha {
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--panel-2);
+  font-size: 12px;
+}
+
+.choque-quando { color: var(--muted); font-size: 11px; }
+.choque-mov { font-weight: 600; }
+.choque-depois { text-align: right; font-weight: 600; }
+
+@media (max-width: 560px) {
+  .mc-rot { flex-basis: 38px; font-size: 10px; }
+  .mc-tf, .mc-cel { min-width: 36px; font-size: 10px; }
+  .cap-linha { grid-template-columns: 1fr auto; }
+  .cap-custo { grid-column: 1 / -1; }
+  .lado-linha { grid-template-columns: 92px 1fr; }
+  .lado-val { grid-column: 2; font-size: 10px; }
+  .choque-cab, .choque-linha { grid-template-columns: 1fr 66px 74px; }
+  .choque-cab span:nth-child(3), .choque-linha .m-sub { display: none; }
+}

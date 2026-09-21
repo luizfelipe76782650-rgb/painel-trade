@@ -15,7 +15,16 @@ import {
   varrer,
   volumeProfile,
   zoneStats,
-} from "./analysis.js?v=35";
+} from "./analysis.js?v=36";
+import {
+  capacidade,
+  choques,
+  correlacao,
+  impacto,
+  monteCarlo,
+  riscoDaCarteira,
+  volTermo,
+} from "./mesa.js?v=36";
 import {
   CATEGORIES,
   JANELA,
@@ -30,7 +39,7 @@ import {
   spotGold,
   tape,
   universe,
-} from "./feed.js?v=35";
+} from "./feed.js?v=36";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const el = (id) => document.getElementById(id);
@@ -101,6 +110,11 @@ const state = {
   ficha: null,
   fichando: false,
   fichaPasso: null,
+  monte: null, monteRodando: false, montePasso: null, monteSel: null,
+  cap: null, capRodando: false,
+  mesa: null, mesaRodando: false, mesaPasso: null,
+  lado: null, ladoRodando: false,
+  choque: null, choqueRodando: false,
   mapa: null,
   mapeando: false,
   mapaPasso: null,
@@ -514,6 +528,9 @@ function reload() {
   state.mapa = null;
   renderMapa();
   mapear();
+  state.cap = null; renderCap();
+  state.lado = null; renderLado();
+  state.choque = null; renderChoque();
 }
 
 /** Refills the asset picker for the chosen group, from the live listing. */
@@ -1543,6 +1560,36 @@ function mountDeep() {
         <div id="fichaBody" class="deep-body"></div>
       </div>
 
+      <div class="card deep-card" id="cardMonte">
+        <div class="plan-head"><span class="lbl">MONTE CARLO</span>
+          <span class="muted" id="monteInfo">—</span></div>
+        <div id="monteBody" class="deep-body"></div>
+      </div>
+
+      <div class="card deep-card" id="cardCap">
+        <div class="plan-head"><span class="lbl">CAPACIDADE E IMPACTO</span>
+          <span class="muted" id="capInfo">—</span></div>
+        <div id="capBody" class="deep-body"></div>
+      </div>
+
+      <div class="card deep-card" id="cardMesa">
+        <div class="plan-head"><span class="lbl">MESA DE RISCO</span>
+          <span class="muted" id="mesaInfo">—</span></div>
+        <div id="mesaBody" class="deep-body"></div>
+      </div>
+
+      <div class="card deep-card" id="cardLado">
+        <div class="plan-head"><span class="lbl">QUEM ESTÁ DO OUTRO LADO</span>
+          <span class="muted" id="ladoInfo">—</span></div>
+        <div id="ladoBody" class="deep-body"></div>
+      </div>
+
+      <div class="card deep-card" id="cardChoque">
+        <div class="plan-head"><span class="lbl">CHOQUES E VOLATILIDADE</span>
+          <span class="muted" id="choqueInfo">—</span></div>
+        <div id="choqueBody" class="deep-body"></div>
+      </div>
+
       <div class="card deep-card" id="cardMapa">
         <div class="plan-head">
           <span class="lbl">MAPA DO ATIVO</span>
@@ -1593,7 +1640,7 @@ function mountDeep() {
     </div>`;
 
   ["posSym", "posBody", "perfilInfo", "perfilBody", "placarInfo", "placarBody",
-   "sessaoInfo", "sessaoBody", "btInfo", "btBody", "baleiaInfo", "baleiaBody", "fichaInfo", "fichaBody", "rankInfo", "rankBody", "labInfo", "labBody", "comiteInfo", "comiteBody", "mapaInfo", "mapaBody"].forEach((id) => (R[id] = el(id)));
+   "sessaoInfo", "sessaoBody", "btInfo", "btBody", "baleiaInfo", "baleiaBody", "fichaInfo", "fichaBody", "rankInfo", "rankBody", "labInfo", "labBody", "comiteInfo", "comiteBody", "mapaInfo", "mapaBody", "monteInfo", "monteBody", "capInfo", "capBody", "mesaInfo", "mesaBody", "ladoInfo", "ladoBody", "choqueInfo", "choqueBody"].forEach((id) => (R[id] = el(id)));
 }
 
 /** A line chart small enough to read as a shape rather than a chart. */
@@ -2675,7 +2722,7 @@ const config = {
     comite: false,
     venderTambem: false,
     taxa: 0.0002,
-    cards: { pos: true, perfil: true, bt: true, mapa: true, ficha: true, comite: true, lab: true, rank: true, baleia: true, placar: true, sessao: true },
+    cards: { pos: true, perfil: true, bt: true, monte: true, cap: true, mesa: true, lado: true, choque: true, mapa: true, ficha: true, comite: true, lab: true, rank: true, baleia: true, placar: true, sessao: true },
   },
 
   atual: null,
@@ -2749,6 +2796,11 @@ function aplicarConfig() {
   mostra("cardRank", c.cards.rank !== false);
   OPERA.venda = c.venderTambem === true;
 
+  mostra("cardMonte", c.cards.monte !== false);
+  mostra("cardCap", c.cards.cap !== false);
+  mostra("cardMesa", c.cards.mesa !== false);
+  mostra("cardLado", c.cards.lado !== false);
+  mostra("cardChoque", c.cards.choque !== false);
   mostra("cardMapa", c.cards.mapa !== false);
   mostra("cardComite", c.cards.comite !== false);
   mostra("cardLab", c.cards.lab !== false);
@@ -3654,6 +3706,11 @@ renderRanking();
 renderLab();
 renderComite();
 renderMapa();
+renderMonte();
+renderCap();
+renderMesa();
+renderLado();
+renderChoque();
 ligarMascote();
 ligarAba();
 ligarSub();
@@ -3945,6 +4002,46 @@ const CAMINHOS = [
     icone: `<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>`,
   },
   {
+    id: "cardMonte",
+    titulo: "Monte Carlo",
+    conta: "Todos os ativos em todos os tempos, reembaralhados mil e quinhentas vezes.",
+    linha: "A chance de lucro, não a média",
+    cor: "#b47cf0",
+    icone: `<path d="M3 3v18h18"/><path d="M7 16c2-6 4 2 5-4s3 5 5-3"/>`,
+  },
+  {
+    id: "cardCap",
+    titulo: "Capacidade e impacto",
+    conta: "Quanto dinheiro este ativo carrega antes da vantagem sumir no livro.",
+    linha: "Mil níveis de livro, ao vivo",
+    cor: "#2fe08a",
+    icone: `<path d="M3 12h4l3-8 4 16 3-8h4"/>`,
+  },
+  {
+    id: "cardMesa",
+    titulo: "Mesa de risco",
+    conta: "Quantas das suas posições são, na verdade, a mesma posição.",
+    linha: "Correlação entre dez ativos",
+    cor: "#ff7a88",
+    icone: `<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>`,
+  },
+  {
+    id: "cardLado",
+    titulo: "Quem está do outro lado",
+    conta: "As contas comuns contra as maiores, funding, prêmio e posições abertas.",
+    linha: "Os dois lados da mesa, separados",
+    cor: "#5c8cff",
+    icone: `<path d="M12 3v18"/><path d="M5 8h4M15 8h4"/><circle cx="7" cy="14" r="3"/><circle cx="17" cy="14" r="3"/>`,
+  },
+  {
+    id: "cardChoque",
+    titulo: "Choques e volatilidade",
+    conta: "As barras em que algo aconteceu, o tamanho do susto e o que veio depois.",
+    linha: "Lido da fita, sem manchete",
+    cor: "#f5b72a",
+    icone: `<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>`,
+  },
+  {
     id: "cardPlacar",
     titulo: "Placar das operações",
     conta: "O que o painel chamou desde que você abriu, e como cada uma terminou.",
@@ -4211,3 +4308,609 @@ function ligarAba() {
 // sequence's function calls do.
 renderInicio();
 el("aba").hidden = false;
+
+// ==========================================================================
+//  MESA — as telas de instituição
+// ==========================================================================
+const TEMPOS_MESA = ["5m", "15m", "1h", "4h", "1d"];
+const ATIVOS_MESA = ["BTC", "ETH", "SOL", "XRP", "ADA", "DOGE", "LINK", "AVAX",
+                     "DOT", "LTC", "BNB", "f:XAU"];
+
+/** The per-trade results a backtest produced, recovered from its equity curve. */
+function resultadosDe(bt) {
+  if (!bt || !bt.curva || bt.curva.length < 5) return null;
+  return bt.curva.map((x, i, arr) => (i ? x - arr[i - 1] : x));
+}
+
+// -------------------------------------------------------------- monte carlo
+/**
+ * Every asset against every timeframe, judged by the spread of outcomes.
+ *
+ * The grid answers the question an average never does: not "does this pay" but
+ * "how often does it pay, and what does the bad road look like". A cell is
+ * shaded by how often the resampled account ends above zero, so a thin edge
+ * that survives only half of its own possible futures stops looking like a
+ * good cell however pretty its average was.
+ */
+async function rodarMonte() {
+  if (state.monteRodando) return;
+  state.monteRodando = true;
+  state.monte = state.monte || { celulas: {} };
+  renderMonte();
+
+  try {
+    for (const id of ATIVOS_MESA) {
+      for (const tf of TEMPOS_MESA) {
+        const chave = id + ":" + tf;
+        state.montePasso = id.replace(/^f:/, "") + " " + tf;
+        renderMonte();
+        await respirar();
+
+        try {
+          const velas = await history(id, tf, 2500);
+          if (!velas || velas.length - JANELA < 300) { state.monte.celulas[chave] = null; continue; }
+          const bt = backtest(velas, { flowBars: FLOW_BARS[tf] || 12, janela: JANELA, taxa: taxaAtual() });
+          const rs = resultadosDe(bt);
+          if (!rs || rs.length < 8) { state.monte.celulas[chave] = null; continue; }
+          const mc = monteCarlo(rs, { caminhos: 1500 });
+          state.monte.celulas[chave] = mc ? { ...mc, porOp: bt.porOp } : null;
+        } catch {
+          state.monte.celulas[chave] = null;
+        }
+        renderMonte();
+      }
+    }
+  } finally {
+    state.monteRodando = false;
+    state.montePasso = null;
+    renderMonte();
+  }
+}
+
+function renderMonte() {
+  if (!R.monteBody) return;
+  const st = state.monte;
+  R.monteInfo.textContent = state.monteRodando
+    ? "medindo " + (state.montePasso || "")
+    : "12 ativos × 5 tempos";
+
+  if (!st) {
+    swap(R.monteBody, "monte", '<div class="vazio">Cada ativo em cada tempo, reembaralhado 1.500 ' +
+      'vezes. Mostra com que frequência a conta termina no lucro, o quanto ela cai pelo caminho e ' +
+      'quantas perdas seguidas esperar — tudo o que a média por operação esconde.</div>' +
+      '<button class="btn largo" id="monteBotao">rodar a grade</button>');
+    el("monteBotao")?.addEventListener("click", rodarMonte);
+    return;
+  }
+
+  const sel = state.monteSel && st.celulas[state.monteSel];
+  const cor = (p) => (p == null ? "var(--line-soft)"
+    : p >= 75 ? UP : p >= 60 ? "#8fd39f" : p >= 45 ? WARN : DOWN);
+
+  const cabeca = '<div class="mc-linha mc-cab"><span class="mc-rot"></span>' +
+    TEMPOS_MESA.map((t) => '<span class="mc-tf">' + t + "</span>").join("") + "</div>";
+
+  const linhas = ATIVOS_MESA.map((id) => {
+    const celulas = TEMPOS_MESA.map((tf) => {
+      const k = id + ":" + tf;
+      const c = st.celulas[k];
+      const p = c ? c.chanceDeLucro : null;
+      const fundo = p == null
+        ? "var(--line-soft)"
+        : "color-mix(in srgb, " + cor(p) + " " + Math.round(18 + (p / 100) * 62) + "%, transparent)";
+      return '<button class="mc-cel' + (state.monteSel === k ? " viva" : "") + '" data-mc="' + k +
+        '" style="background:' + fundo + '">' + (p == null ? "·" : Math.round(p)) + "</button>";
+    }).join("");
+    return '<div class="mc-linha"><span class="mc-rot">' + esc(id.replace(/^f:/, "")) +
+      "</span>" + celulas + "</div>";
+  }).join("");
+
+  const detalhe = sel
+    ? '<div class="mc-detalhe"><div class="mc-tit">' + esc(state.monteSel.replace(/^f:/, "")) + "</div>" +
+      '<div class="metricas">' +
+        '<div class="metrica"><span class="m-rot">CHANCE DE LUCRO</span>' +
+          '<span class="m-val" style="color:' + cor(sel.chanceDeLucro) + '">' +
+          sel.chanceDeLucro.toFixed(0) + '%</span>' +
+          '<span class="m-sub">' + sel.operacoes + " operações</span></div>" +
+        '<div class="metrica"><span class="m-rot">CAMINHO TÍPICO</span>' +
+          '<span class="m-val" style="color:' + (sel.mediana > 0 ? UP : DOWN) + '">' +
+          (sel.mediana >= 0 ? "+" : "") + sel.mediana.toFixed(1) + 'R</span>' +
+          '<span class="m-sub">pior 5%: ' + sel.pior5.toFixed(1) + "R</span></div>" +
+        '<div class="metrica"><span class="m-rot">QUEDA ESPERADA</span>' +
+          '<span class="m-val" style="color:' + DOWN + '">−' + sel.quedaTipica.toFixed(1) + 'R</span>' +
+          '<span class="m-sub">ruim: −' + sel.quedaRuim.toFixed(1) + "R</span></div>" +
+        '<div class="metrica"><span class="m-rot">PERDAS SEGUIDAS</span>' +
+          '<span class="m-val">' + sel.perdasSeguidas.toFixed(1) + "</span>" +
+          '<span class="m-sub">esperadas no caminho</span></div>' +
+      "</div>" +
+      '<div class="nota">A média desta célula é ' + (sel.porOp >= 0 ? "+" : "") + sel.porOp.toFixed(3) +
+        "R por operação. Ainda assim, em " + (100 - sel.chanceDeLucro).toFixed(0) +
+        "% dos caminhos possíveis ela termina no prejuízo, e o normal é atravessar " +
+        sel.perdasSeguidas.toFixed(0) + " perdas seguidas antes do fim.</div></div>"
+    : '<div class="nota">Toque numa célula para ver o caminho dela. O número é a chance de ' +
+      "terminar no lucro em 1.500 reembaralhamentos das operações medidas.</div>";
+
+  swap(R.monteBody, "monte", '<div class="mc-grade">' + cabeca + linhas + "</div>" + detalhe +
+    '<button class="btn largo" id="monteBotao">' +
+    (state.monteRodando ? "medindo…" : "rodar de novo") + "</button>");
+
+  R.monteBody.querySelectorAll("[data-mc]").forEach((b) =>
+    b.addEventListener("click", () => { state.monteSel = b.dataset.mc; renderMonte(); }));
+  const botao = el("monteBotao");
+  if (botao) { botao.disabled = state.monteRodando; botao.addEventListener("click", rodarMonte); }
+}
+
+// --------------------------------------------------------------- capacidade
+/** A thousand levels of book — deep enough for the question to mean something. */
+async function livroFundo(symbolId) {
+  if (symbolId.startsWith("f:")) return null; // futuros não entregam este livro
+  const par = symbolId + "USDT";
+  try {
+    const r = await fetch("https://api.binance.com/api/v3/depth?symbol=" + par + "&limit=1000");
+    if (!r.ok) return null;
+    const j = await r.json();
+    return j.bids && j.bids.length ? j : null;
+  } catch { return null; }
+}
+
+/**
+ * How much money this edge carries before the book eats it.
+ *
+ * A real order walks down the levels, and what it pays above the touch is a
+ * cost like any other — expressed in R it sits directly against the measured
+ * edge, which gives the number no retail panel states: the size at which the
+ * edge is gone.
+ */
+async function medirCapacidade() {
+  if (state.capRodando) return;
+  state.capRodando = true;
+  renderCap();
+
+  try {
+    const [velas, livro] = await Promise.all([
+      history(state.symbol, state.timeframe, 2500),
+      livroFundo(state.symbol),
+    ]);
+
+    if (!livro) {
+      state.cap = { erro: "Este ativo não entrega livro profundo — só os pares à vista da Binance." };
+      return;
+    }
+    if (!velas) { state.cap = { erro: "Histórico indisponível." }; return; }
+
+    const bt = backtest(velas, { flowBars: FLOW_BARS[state.timeframe] || 12, janela: JANELA, taxa: taxaAtual() });
+    const a = (state.analysis && state.analysis.atr) || 0;
+    const preco = +livro.asks[0][0];
+    const stopPct = preco > 0 ? a / preco : 0;
+
+    if (!bt || bt.total < 5 || !(bt.porOp > 0) || !(stopPct > 0)) {
+      state.cap = { semVantagem: true, ops: bt ? bt.total : 0, porOp: bt ? bt.porOp : null,
+                    timeframe: state.timeframe };
+      return;
+    }
+
+    state.cap = Object.assign(
+      capacidade(livro.bids, livro.asks, stopPct, bt.porOp, taxaAtual()),
+      { vantagem: bt.porOp, ops: bt.total, timeframe: state.timeframe }
+    );
+  } catch (err) {
+    state.cap = { erro: err.message };
+  } finally {
+    state.capRodando = false;
+    renderCap();
+  }
+}
+
+function renderCap() {
+  if (!R.capBody) return;
+  const ativo = state.symbol.replace(/^f:/, "");
+  R.capInfo.textContent = state.capRodando ? "medindo…" : ativo + " · " + state.timeframe;
+  const c = state.cap;
+
+  if (state.capRodando) {
+    swap(R.capBody, "cap", '<div class="vazio">andando pelo livro…</div>');
+    return;
+  }
+
+  if (!c) {
+    swap(R.capBody, "cap", '<div class="vazio">O topo do livro é um preço para um tamanho que ' +
+      'ninguém negocia. Esta medida anda pelos 1.000 níveis reais e diz quanto a sua ordem ' +
+      'escorrega, quanto isso custa em R, e <strong>em que tamanho a vantagem deste ativo ' +
+      'acaba</strong>.</div><button class="btn largo" id="capBotao">medir ' + esc(ativo) + "</button>");
+    el("capBotao")?.addEventListener("click", medirCapacidade);
+    return;
+  }
+
+  let corpo;
+  if (c.erro) {
+    corpo = '<div class="vazio">' + esc(c.erro) + "</div>";
+  } else if (c.semVantagem) {
+    corpo = '<div class="vazio">' + esc(ativo) + " no " + esc(c.timeframe) + " rende " +
+      (c.porOp == null ? "—" : (c.porOp >= 0 ? "+" : "") + c.porOp.toFixed(3) + "R") +
+      " por operação em " + c.ops + " medidas. Sem vantagem positiva não há capacidade a " +
+      "calcular — qualquer tamanho perde dinheiro.</div>";
+  } else {
+    const linhas = c.degraus.map((d) => {
+      const col = d.estourou ? DOWN : d.sobra > 0 ? UP : DOWN;
+      return '<div class="cap-linha"><span class="cap-usd">$' + d.usd.toLocaleString("pt-BR") +
+        '</span><span class="cap-custo">' +
+        (d.estourou ? "livro não aguenta" : "custa " + d.custoR.toFixed(3) + "R") +
+        '</span><span class="cap-sobra" style="color:' + col + '">' +
+        (d.estourou ? "—" : (d.sobra >= 0 ? "+" : "") + d.sobra.toFixed(3) + "R") + "</span></div>";
+    }).join("");
+
+    corpo = '<div class="metricas">' +
+      '<div class="metrica"><span class="m-rot">VANTAGEM MEDIDA</span>' +
+        '<span class="m-val" style="color:' + UP + '">+' + c.vantagem.toFixed(3) + 'R</span>' +
+        '<span class="m-sub">' + c.ops + " operações</span></div>" +
+      '<div class="metrica"><span class="m-rot">TETO DESTE ATIVO</span>' +
+        '<span class="m-val">$' + Math.round(c.teto).toLocaleString("pt-BR") + "</span>" +
+        '<span class="m-sub">a vantagem some acima disso</span></div></div>' +
+      '<div class="cap-lista">' + linhas + "</div>" +
+      '<div class="nota">Ida e volta pelo livro de 1.000 níveis, mais a corretagem escolhida, ' +
+      "dividido pela distância do stop. É a pergunta que mesa faz antes de qualquer outra: " +
+      "quanto dinheiro isso carrega antes de virar nada.</div>";
+  }
+
+  swap(R.capBody, "cap", corpo + '<button class="btn largo" id="capBotao">medir de novo</button>');
+  el("capBotao")?.addEventListener("click", medirCapacidade);
+}
+
+// -------------------------------------------------------------- mesa de risco
+/**
+ * How many of these positions are secretly the same position.
+ *
+ * Adding sizes together assumes the assets move independently. In crypto they
+ * mostly do not, and a trader holding BTC, ETH and SOL believes they hold three
+ * trades while carrying something closer to one of nearly triple the size. The
+ * matrix is the plain correlation of hourly returns; what matters underneath it
+ * is how much of the naive total survives.
+ */
+async function medirMesa() {
+  if (state.mesaRodando) return;
+  state.mesaRodando = true;
+  renderMesa();
+
+  const ids = ATIVOS_MESA.slice(0, 10);
+  try {
+    const series = [];
+    for (const id of ids) {
+      state.mesaPasso = id.replace(/^f:/, "");
+      renderMesa();
+      const v = await history(id, "1h", 700);
+      series.push(v && v.length > 100 ? v : null);
+      await respirar();
+    }
+
+    const usados = [];
+    const dados = [];
+    ids.forEach((id, i) => { if (series[i]) { usados.push(id); dados.push(series[i]); } });
+
+    const matriz = dados.map((a) => dados.map((b) => (a === b ? 1 : correlacao(a, b))));
+    const pesos = usados.map(() => 1);
+    const risco = riscoDaCarteira(pesos, matriz);
+
+    // a média das correlações fora da diagonal diz o quanto o mercado é um só
+    let soma = 0;
+    let n = 0;
+    for (let i = 0; i < matriz.length; i++) {
+      for (let j = i + 1; j < matriz.length; j++) {
+        if (matriz[i][j] != null) { soma += matriz[i][j]; n++; }
+      }
+    }
+
+    state.mesa = { ids: usados, matriz, risco, media: n ? soma / n : null };
+  } catch (err) {
+    state.mesa = { erro: err.message };
+  } finally {
+    state.mesaRodando = false;
+    state.mesaPasso = null;
+    renderMesa();
+  }
+}
+
+function renderMesa() {
+  if (!R.mesaBody) return;
+  R.mesaInfo.textContent = state.mesaRodando
+    ? "medindo " + (state.mesaPasso || "")
+    : "correlação de 1h";
+  const m = state.mesa;
+
+  if (state.mesaRodando && !m) {
+    swap(R.mesaBody, "mesa", '<div class="vazio">medindo ' + esc(state.mesaPasso || "") + "…</div>");
+    return;
+  }
+
+  if (!m) {
+    swap(R.mesaBody, "mesa", '<div class="vazio">Se você está comprado em BTC, ETH e SOL, você ' +
+      'não tem três operações. Tem uma, de tamanho maior. Esta tela mede o quanto os ativos ' +
+      'andam juntos e quanto do seu risco somado sobra de verdade.</div>' +
+      '<button class="btn largo" id="mesaBotao">medir a mesa</button>');
+    el("mesaBotao")?.addEventListener("click", medirMesa);
+    return;
+  }
+
+  if (m.erro) {
+    swap(R.mesaBody, "mesa", '<div class="vazio">' + esc(m.erro) + "</div>" +
+      '<button class="btn largo" id="mesaBotao">tentar de novo</button>');
+    el("mesaBotao")?.addEventListener("click", medirMesa);
+    return;
+  }
+
+  const cor = (c) => (c == null ? "var(--line-soft)"
+    : "color-mix(in srgb, " + (c >= 0 ? DOWN : UP) + " " + Math.round(Math.abs(c) * 80) + "%, transparent)");
+
+  const cabeca = '<div class="mc-linha mc-cab"><span class="mc-rot"></span>' +
+    m.ids.map((id) => '<span class="mc-tf">' + esc(id.replace(/^f:/, "").slice(0, 4)) + "</span>").join("") +
+    "</div>";
+
+  const linhas = m.ids.map((id, i) => {
+    const celulas = m.ids.map((_, j) => {
+      const c = m.matriz[i][j];
+      return '<button class="mc-cel" style="background:' + (i === j ? "var(--line)" : cor(c)) + '">' +
+        (c == null ? "·" : (i === j ? "—" : c.toFixed(2).replace("0.", "."))) + "</button>";
+    }).join("");
+    return '<div class="mc-linha"><span class="mc-rot">' + esc(id.replace(/^f:/, "")) + "</span>" +
+      celulas + "</div>";
+  }).join("");
+
+  const conc = m.risco ? m.risco.concentracao : null;
+  const equivalentes = conc ? 1 / (conc * conc) : null;
+
+  const topo = '<div class="metricas">' +
+    '<div class="metrica"><span class="m-rot">CORRELAÇÃO MÉDIA</span>' +
+      '<span class="m-val" style="color:' + (m.media > 0.7 ? DOWN : m.media > 0.4 ? WARN : UP) + '">' +
+      (m.media == null ? "—" : m.media.toFixed(2)) + "</span>" +
+      '<span class="m-sub">entre os 10 ativos</span></div>' +
+    '<div class="metrica"><span class="m-rot">APOSTAS DE VERDADE</span>' +
+      '<span class="m-val">' + (equivalentes == null ? "—" : equivalentes.toFixed(1)) + "</span>" +
+      '<span class="m-sub">de 10 posições iguais</span></div>' +
+    "</div>";
+
+  const recado = equivalentes == null ? "" :
+    '<div class="mesa-recado">Dez posições do mesmo tamanho nestes ativos valem por ' +
+    '<strong>' + equivalentes.toFixed(1) + ' apostas independentes</strong>. O resto é a mesma ' +
+    'aposta repetida — e é assim que uma carteira que parece espalhada perde tudo no mesmo dia.</div>';
+
+  swap(R.mesaBody, "mesa", topo + recado + '<div class="mc-grade">' + cabeca + linhas + "</div>" +
+    '<div class="nota">Correlação dos retornos de hora em hora nas últimas 700 barras. ' +
+    'Vermelho é andar junto, verde é andar contra. Na diagonal cada ativo consigo mesmo.</div>' +
+    '<button class="btn largo" id="mesaBotao">medir de novo</button>');
+  el("mesaBotao")?.addEventListener("click", medirMesa);
+}
+
+// ------------------------------------------------------- quem está do outro lado
+/**
+ * The two sides of the book, told apart.
+ *
+ * Binance publishes the long/short split of ordinary accounts and, separately,
+ * of the largest ones. When those two disagree, someone is wrong, and knowing
+ * which side the size is on is the oldest read on a desk. Open interest says
+ * whether money is arriving or leaving, funding says who is paying to stay, and
+ * the perpetual's premium over spot says how crowded the leverage is.
+ */
+async function medirLado() {
+  if (state.ladoRodando) return;
+  state.ladoRodando = true;
+  renderLado();
+
+  const par = state.symbol.replace(/^f:/, "") + "USDT";
+  const F = "https://fapi.binance.com";
+  const pega = async (u) => { const r = await fetch(u); return r.ok ? r.json() : null; };
+
+  try {
+    const [contas, grandes, oi, oiHist, premio] = await Promise.all([
+      pega(F + "/futures/data/globalLongShortAccountRatio?symbol=" + par + "&period=1h&limit=24"),
+      pega(F + "/futures/data/topLongShortPositionRatio?symbol=" + par + "&period=1h&limit=24"),
+      pega(F + "/fapi/v1/openInterest?symbol=" + par),
+      pega(F + "/futures/data/openInterestHist?symbol=" + par + "&period=1h&limit=24"),
+      pega(F + "/fapi/v1/premiumIndex?symbol=" + par),
+    ]);
+
+    if (!contas || !contas.length) {
+      state.lado = { erro: "A Binance não publica posicionamento para este ativo." };
+      return;
+    }
+
+    const ult = (a) => (a && a.length ? a[a.length - 1] : null);
+    const c = ult(contas);
+    const g = ult(grandes);
+    const oiAgora = oiHist && oiHist.length ? +ult(oiHist).sumOpenInterest : null;
+    const oiAntes = oiHist && oiHist.length > 12 ? +oiHist[0].sumOpenInterest : null;
+
+    const marca = premio ? +premio.markPrice : null;
+    const indice = premio ? +premio.indexPrice : null;
+
+    state.lado = {
+      symbol: state.symbol,
+      varejoLong: c ? +c.longAccount * 100 : null,
+      grandesLong: g ? +g.longAccount * 100 : null,
+      funding: premio ? +premio.lastFundingRate * 100 : null,
+      premio: marca && indice ? ((marca - indice) / indice) * 100 : null,
+      oi: oi ? +oi.openInterest : null,
+      oiVariacao: oiAgora && oiAntes ? ((oiAgora - oiAntes) / oiAntes) * 100 : null,
+    };
+  } catch (err) {
+    state.lado = { erro: err.message };
+  } finally {
+    state.ladoRodando = false;
+    renderLado();
+  }
+}
+
+function renderLado() {
+  if (!R.ladoBody) return;
+  const ativo = state.symbol.replace(/^f:/, "");
+  R.ladoInfo.textContent = state.ladoRodando ? "buscando…" : ativo + " · perpétuo";
+  const l = state.lado;
+
+  if (state.ladoRodando) { swap(R.ladoBody, "lado", '<div class="vazio">buscando…</div>'); return; }
+
+  if (!l) {
+    swap(R.ladoBody, "lado", '<div class="vazio">A Binance publica, separado, o quanto as contas ' +
+      'comuns estão compradas e o quanto as maiores estão. Quando os dois discordam, um lado ' +
+      'está errado — e saber de que lado está o tamanho é a leitura mais antiga que existe numa ' +
+      'mesa.</div><button class="btn largo" id="ladoBotao">ver ' + esc(ativo) + "</button>");
+    el("ladoBotao")?.addEventListener("click", medirLado);
+    return;
+  }
+
+  if (l.erro) {
+    swap(R.ladoBody, "lado", '<div class="vazio">' + esc(l.erro) + "</div>" +
+      '<button class="btn largo" id="ladoBotao">tentar de novo</button>');
+    el("ladoBotao")?.addEventListener("click", medirLado);
+    return;
+  }
+
+  const barra = (rot, pct, col) => pct == null ? "" :
+    '<div class="lado-linha"><span class="lado-rot">' + rot + "</span>" +
+    '<div class="lado-barra"><div class="lado-fill" style="width:' + pct.toFixed(0) +
+    "%;background:" + col + '"></div></div>' +
+    '<span class="lado-val" style="color:' + col + '">' + pct.toFixed(0) + "% comprado</span></div>";
+
+  const diverge = l.varejoLong != null && l.grandesLong != null
+    ? l.grandesLong - l.varejoLong : null;
+
+  const recado = diverge == null ? "" :
+    '<div class="mesa-recado">' + (Math.abs(diverge) < 5
+      ? "Os dois lados estão de acordo. Sem divergência para ler aqui."
+      : "Os grandes estão <strong>" + Math.abs(diverge).toFixed(0) + " pontos mais " +
+        (diverge > 0 ? "comprados" : "vendidos") + "</strong> que as contas comuns.") + "</div>";
+
+  const num = (v, suf, casas) => (v == null ? "—" : (v >= 0 ? "+" : "") + v.toFixed(casas) + suf);
+
+  swap(R.ladoBody, "lado",
+    barra("CONTAS COMUNS", l.varejoLong, WARN) +
+    barra("OS MAIORES", l.grandesLong, "#5c8cff") +
+    recado +
+    '<div class="metricas">' +
+      '<div class="metrica"><span class="m-rot">FUNDING</span>' +
+        '<span class="m-val" style="color:' + (l.funding > 0 ? DOWN : l.funding < 0 ? UP : NEU) + '">' +
+        num(l.funding, "%", 4) + "</span>" +
+        '<span class="m-sub">' + (l.funding > 0 ? "comprado paga" : l.funding < 0 ? "vendido paga" : "neutro") +
+        "</span></div>" +
+      '<div class="metrica"><span class="m-rot">PRÊMIO DO FUTURO</span>' +
+        '<span class="m-val">' + num(l.premio, "%", 3) + "</span>" +
+        '<span class="m-sub">sobre o à vista</span></div>' +
+      '<div class="metrica"><span class="m-rot">POSIÇÕES ABERTAS</span>' +
+        '<span class="m-val" style="color:' + (l.oiVariacao > 0 ? UP : l.oiVariacao < 0 ? DOWN : NEU) + '">' +
+        num(l.oiVariacao, "%", 1) + "</span>" +
+        '<span class="m-sub">nas últimas 24h</span></div>' +
+    "</div>" +
+    '<div class="nota">Posições abertas subindo com o preço é dinheiro novo entrando. Caindo ' +
+    "com o preço subindo é gente sendo espremida para fora. O funding é quem paga para " +
+    "continuar de pé.</div>" +
+    '<button class="btn largo" id="ladoBotao">atualizar</button>');
+  el("ladoBotao")?.addEventListener("click", medirLado);
+}
+
+// ------------------------------------------------------ choques e volatilidade
+/**
+ * What the tape says happened, and how wound up the market is now.
+ *
+ * The panel has no headlines, so it does not claim to know what the news was.
+ * It can say that a bar moved far beyond this asset's own recent range while
+ * carrying the volume to mean it, how big that was, and — the part that is
+ * actually useful — what the asset went on to do in the hours afterwards.
+ */
+async function medirChoque() {
+  if (state.choqueRodando) return;
+  state.choqueRodando = true;
+  renderChoque();
+
+  try {
+    const velas = await history(state.symbol, state.timeframe, 2000);
+    if (!velas || velas.length < 200) { state.choque = { erro: "Histórico curto demais." }; return; }
+
+    const lista = choques(velas, { olharAdiante: 12, limite: 8 });
+    const depois = lista.map((c) => c.depois).filter((x) => typeof x === "number");
+    const media = depois.length ? depois.reduce((s, x) => s + x, 0) / depois.length : null;
+
+    state.choque = {
+      lista,
+      media,
+      vol: volTermo(velas, TF_SECONDS[state.timeframe] || 3600),
+      timeframe: state.timeframe,
+      symbol: state.symbol,
+    };
+  } catch (err) {
+    state.choque = { erro: err.message };
+  } finally {
+    state.choqueRodando = false;
+    renderChoque();
+  }
+}
+
+function renderChoque() {
+  if (!R.choqueBody) return;
+  const ativo = state.symbol.replace(/^f:/, "");
+  R.choqueInfo.textContent = state.choqueRodando ? "medindo…" : ativo + " · " + state.timeframe;
+  const c = state.choque;
+
+  if (state.choqueRodando) { swap(R.choqueBody, "choque", '<div class="vazio">medindo…</div>'); return; }
+
+  if (!c) {
+    swap(R.choqueBody, "choque", '<div class="vazio">O painel não tem manchete, então não finge ' +
+      'saber o que aconteceu. Ele acha as barras em que o preço saiu muito da faixa normal ' +
+      '<em>com volume para valer</em>, mede o tamanho do choque, e mostra o que o ativo fez ' +
+      'nas horas seguintes.</div><button class="btn largo" id="choqueBotao">procurar em ' +
+      esc(ativo) + "</button>");
+    el("choqueBotao")?.addEventListener("click", medirChoque);
+    return;
+  }
+
+  if (c.erro) {
+    swap(R.choqueBody, "choque", '<div class="vazio">' + esc(c.erro) + "</div>" +
+      '<button class="btn largo" id="choqueBotao">tentar de novo</button>');
+    el("choqueBotao")?.addEventListener("click", medirChoque);
+    return;
+  }
+
+  const v = c.vol;
+  const tensao = v && v.razao != null
+    ? (v.razao > 1.3 ? { txt: "ESTICADA", col: DOWN } :
+       v.razao < 0.7 ? { txt: "COMPRIMIDA", col: WARN } : { txt: "NORMAL", col: NEU })
+    : null;
+
+  const topo = v ? '<div class="metricas">' +
+      '<div class="metrica"><span class="m-rot">AGORA (24 BARRAS)</span>' +
+        '<span class="m-val">' + v.curta.toFixed(0) + '%</span><span class="m-sub">ao ano</span></div>' +
+      '<div class="metrica"><span class="m-rot">DE FUNDO (400)</span>' +
+        '<span class="m-val">' + v.longa.toFixed(0) + '%</span><span class="m-sub">ao ano</span></div>' +
+      '<div class="metrica"><span class="m-rot">TENSÃO</span>' +
+        '<span class="m-val" style="color:' + tensao.col + '">' + tensao.txt + "</span>" +
+        '<span class="m-sub">' + v.razao.toFixed(2) + "× do normal</span></div>" +
+    "</div>" : "";
+
+  const linhas = c.lista.length
+    ? c.lista.map((x) => {
+        const quando = new Date(x.time).toLocaleString("pt-BR",
+          { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+        const col = x.retorno >= 0 ? UP : DOWN;
+        const colD = x.depois >= 0 ? UP : DOWN;
+        return '<div class="choque-linha"><span class="choque-quando">' + quando + "</span>" +
+          '<span class="choque-mov" style="color:' + col + '">' +
+          (x.retorno >= 0 ? "+" : "") + (x.retorno * 100).toFixed(2) + "%</span>" +
+          '<span class="m-sub">' + Math.abs(x.desvios).toFixed(1) + "σ · " +
+          x.vezesVolume.toFixed(1) + "× vol</span>" +
+          '<span class="choque-depois" style="color:' + colD + '">' +
+          (x.depois >= 0 ? "+" : "") + (x.depois * 100).toFixed(2) + "%</span></div>";
+      }).join("")
+    : '<div class="vazio">Nenhum choque grande no histórico recente deste ativo.</div>';
+
+  const veredito = c.media == null ? "" :
+    '<div class="mesa-recado">Depois dos choques, nas 12 barras seguintes, este ativo andou em ' +
+    "média <strong>" + (c.media >= 0 ? "+" : "") + (c.media * 100).toFixed(2) +
+    "%</strong> — " + (Math.abs(c.media) < 0.3
+      ? "ou seja, o choque foi o movimento todo e não sobrou continuação."
+      : c.media > 0 ? "a favor do susto." : "contra o susto, devolvendo parte dele.") + "</div>";
+
+  swap(R.choqueBody, "choque", topo +
+    '<div class="choque-cab"><span>quando</span><span>movimento</span><span>tamanho</span>' +
+    "<span>12 barras depois</span></div>" +
+    '<div class="choque-lista">' + linhas + "</div>" + veredito +
+    '<div class="nota">Um choque é uma barra além de 2,5 desvios do normal deste ativo <em>e</em> ' +
+    "com pelo menos o dobro do volume médio. Preço sem volume é ruído; volume sem preço é " +
+    'rodízio.</div><button class="btn largo" id="choqueBotao">procurar de novo</button>');
+  el("choqueBotao")?.addEventListener("click", medirChoque);
+}
