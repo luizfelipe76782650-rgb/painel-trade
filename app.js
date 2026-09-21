@@ -12,7 +12,7 @@ import {
   varrer,
   volumeProfile,
   zoneStats,
-} from "./analysis.js?v=21";
+} from "./analysis.js?v=22";
 import {
   CATEGORIES,
   JANELA,
@@ -27,7 +27,7 @@ import {
   spotGold,
   tape,
   universe,
-} from "./feed.js?v=21";
+} from "./feed.js?v=22";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const el = (id) => document.getElementById(id);
@@ -1994,10 +1994,36 @@ function renderBacktest() {
         state.varrendo ? "medindo 30 combinações…" : "otimizar os controles"
       }</button>`;
 
+  const folga = bt.acertoNecessario != null ? bt.taxa - bt.acertoNecessario : null;
+
   swap(
     R.btBody,
     "bt",
-    `<div class="metricas">
+    `${
+      folga != null
+        ? `<div class="equilibrio ${folga >= 0 ? "acima" : "abaixo"}">
+             <div class="eq-linha">
+               <span>precisa acertar</span>
+               <b>${bt.acertoNecessario.toFixed(1)}%</b>
+             </div>
+             <div class="eq-barra">
+               <div class="eq-marca" style="left:${Math.min(100, bt.acertoNecessario).toFixed(1)}%"></div>
+               <div class="eq-atual" style="width:${Math.min(100, bt.taxa).toFixed(1)}%"></div>
+             </div>
+             <div class="eq-linha">
+               <span>acerta de fato</span>
+               <b>${bt.taxa.toFixed(1)}%</b>
+             </div>
+             <div class="eq-veredito">${
+               folga >= 0
+                 ? `sobra ${folga.toFixed(1)} pontos acima do empate`
+                 : `falta ${Math.abs(folga).toFixed(1)} pontos para empatar`
+             }</div>
+           </div>`
+        : ""
+    }
+
+    <div class="metricas">
       <div class="metrica"><span class="m-rot">OPERAÇÕES</span>
         <span class="m-val">${bt.total}</span></div>
       <div class="metrica"><span class="m-rot">ACERTO</span>
@@ -2010,6 +2036,13 @@ function renderBacktest() {
           3
         )}R</span>
         <span class="m-sub">já com taxa</span></div>
+    </div>
+
+    <div class="metricas">
+      <div class="metrica"><span class="m-rot">GANHO MÉDIO</span>
+        <span class="m-val" style="color:${UP}">+${bt.mediaGanho.toFixed(2)}R</span></div>
+      <div class="metrica"><span class="m-rot">PERDA MÉDIA</span>
+        <span class="m-val" style="color:${DOWN}">−${bt.mediaPerda.toFixed(2)}R</span></div>
     </div>
 
     ${

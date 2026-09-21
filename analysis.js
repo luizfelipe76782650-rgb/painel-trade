@@ -497,6 +497,28 @@ export function backtest(candles, opts = {}) {
   const empates = operacoes.filter((o) => o.resultado === "empate").length;
   const ganhos = operacoes.filter((o) => o.r > 0).length;
 
+  /**
+   * The bar the reading has to clear.
+   *
+   * Not from the planned reward — the trailing stop cuts most winners before
+   * they reach it, so the plan flatters the strategy. This uses what the wins
+   * and losses actually measured, which is the only honest version: with those
+   * sizes, this is the hit rate that would leave you exactly even, fees
+   * included. Below it, no amount of good-looking entries saves the result.
+   */
+  const vencedoras = operacoes.filter((o) => o.r > 0);
+  const perdedoras = operacoes.filter((o) => o.r <= 0);
+  const mediaGanho = vencedoras.length
+    ? vencedoras.reduce((soma, o) => soma + o.r, 0) / vencedoras.length
+    : 0;
+  const mediaPerda = perdedoras.length
+    ? Math.abs(perdedoras.reduce((soma, o) => soma + o.r, 0) / perdedoras.length)
+    : 0;
+
+  const custoMedio = operacoes.length ? custos / operacoes.length : 0;
+  const acertoNecessario =
+    mediaGanho + mediaPerda > 0 ? (mediaPerda / (mediaGanho + mediaPerda)) * 100 : null;
+
   return {
     operacoes,
     curva,
@@ -507,7 +529,10 @@ export function backtest(candles, opts = {}) {
     taxa: operacoes.length ? (ganhos / operacoes.length) * 100 : 0,
     r,
     porOp: operacoes.length ? r / operacoes.length : 0,
-    custoMedio: operacoes.length ? custos / operacoes.length : 0,
+    custoMedio,
+    mediaGanho,
+    mediaPerda,
+    acertoNecessario,
     barras: candles.length - warmup,
   };
 }

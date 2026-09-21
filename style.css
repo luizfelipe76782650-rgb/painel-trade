@@ -2267,3 +2267,71 @@ button {
   min-width: 0;
   height: 28px;
 }
+
+/* ---------- ponto de equilíbrio ---------- */
+.equilibrio {
+  border: 1px solid;
+  border-radius: 8px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.equilibrio.acima {
+  border-color: rgba(47, 224, 138, 0.45);
+  background: rgba(47, 224, 138, 0.07);
+}
+
+.equilibrio.abaixo {
+  border-color: rgba(255, 77, 99, 0.45);
+  background: rgba(255, 77, 99, 0.07);
+}
+
+.eq-linha {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 10px;
+  color: var(--dim);
+}
+
+.eq-linha b {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 16px;
+  color: var(--text);
+}
+
+.eq-barra {
+  position: relative;
+  height: 8px;
+  border-radius: 4px;
+  background: #19211f;
+  overflow: hidden;
+}
+
+.eq-atual {
+  height: 100%;
+  background: linear-gradient(90deg, #1d8f5b, var(--up));
+  transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.equilibrio.abaixo .eq-atual {
+  background: linear-gradient(90deg, #a32b38, var(--down));
+}
+
+.eq-marca {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  background: var(--text);
+  z-index: 2;
+  transition: left 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.eq-veredito {
+  font-size: 10.5px;
+  text-align: center;
+  color: var(--muted);
+}
