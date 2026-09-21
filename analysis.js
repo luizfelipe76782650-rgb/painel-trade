@@ -468,13 +468,28 @@ export function backtest(candles, opts = {}) {
     });
 
     if (res.plan && res.plan.side !== "fora") {
-      const ultima = vista[vista.length - 1];
-      aberta = {
-        ...res.plan,
-        stopInicial: res.plan.stop,
-        atr: res.atr,
-        abertura: ultima.time,
-      };
+      /**
+       * The signal forms on a bar that has already finished, so entering at its
+       * close and then asking whether that same bar reached the target counts a
+       * move that happened before the decision existed. The trade opens on the
+       * next bar instead, at its open, and is only watched from there — which
+       * is also how it would actually be filled.
+       */
+      const proxima = candles[i];
+      const entrada = proxima.open;
+      const risco = Math.abs(entrada - res.plan.stop);
+      const ganho = Math.abs(res.plan.alvo - entrada);
+
+      if (risco > 0 && ganho / risco >= 1) {
+        aberta = {
+          ...res.plan,
+          entrada,
+          rr: ganho / risco,
+          stopInicial: res.plan.stop,
+          atr: res.atr,
+          abertura: proxima.time,
+        };
+      }
     }
   }
 
