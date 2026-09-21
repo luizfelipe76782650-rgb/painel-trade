@@ -8,7 +8,7 @@ import {
   varrer,
   volumeProfile,
   zoneStats,
-} from "./analysis.js?v=7";
+} from "./analysis.js?v=8";
 import {
   CATEGORIES,
   assetSource,
@@ -22,7 +22,7 @@ import {
   spotGold,
   tape,
   universe,
-} from "./feed.js?v=7";
+} from "./feed.js?v=8";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const el = (id) => document.getElementById(id);
@@ -86,6 +86,8 @@ const state = {
   lag: 0,
   spot: 0,
   pos: null,
+  scan: null,
+  escaneando: false,
   hist: null,
   bt: null,
   btErro: null,
@@ -474,8 +476,10 @@ function reload() {
   state.data = null;
   state.analysis = null;
   shown.price = 0;
+  state.scan = null;
   start();
   rodarBacktest();
+  escanear();
 }
 
 /** Refills the asset picker for the chosen group, from the live listing. */
@@ -791,6 +795,7 @@ function paint() {
   paintBars();
   paintBook(data.book, shown.price);
   pintarMascote();
+  pintarDica();
 
   const all = data.candles;
   const count = Math.min(state.view.count, all.length);
@@ -2030,17 +2035,6 @@ function vigiar() {
   }
   v.aberta = chaveAberta;
 
-  // um sinal está esperando a barra fechar
-  const chavePendente = state.pendente ? `${state.pendente.side}:${state.barTime}` : null;
-  if (chavePendente && chavePendente !== v.pendente) {
-    vigia.add(
-      "pendente",
-      `Sinal de ${state.pendente.side} em ${ativo} aguardando o fechamento da barra`,
-      WARN
-    );
-  }
-  v.pendente = chavePendente;
-
   // uma operação terminou
   const chaveUltima = state.ultima ? `${state.ultima.abertura}:${state.ultima.resultado}` : null;
   if (chaveUltima && chaveUltima !== v.ultima) {
@@ -2055,43 +2049,6 @@ function vigiar() {
     );
   }
   v.ultima = chaveUltima;
-
-  if (state.pos) {
-    // o funding trocou de lado
-    const sinal = state.pos.funding == null ? null : Math.sign(state.pos.funding);
-    if (sinal !== null && v.funding !== null && sinal !== v.funding) {
-      vigia.add(
-        "funding",
-        `Funding de ${ativo} virou para ${sinal > 0 ? "positivo" : "negativo"} (${(
-          state.pos.funding * 100
-        ).toFixed(4)}%) — agora quem paga são os ${sinal > 0 ? "comprados" : "vendidos"}`,
-        sinal > 0 ? DOWN : UP
-      );
-    }
-    if (sinal !== null) v.funding = sinal;
-
-    // varejo e grandes passaram a discordar
-    const d = divergencia();
-    if (d && d.chave !== v.divergencia) {
-      vigia.add("divergencia", d.texto, d.cor);
-    }
-    v.divergencia = d ? d.chave : null;
-  }
-
-  // um negócio grande passou na fita
-  const b = maiorBaleia();
-  if (b && b.chave !== v.baleia) {
-    if (v.baleia !== null) {
-      vigia.add(
-        "baleia",
-        `Negócio grande em ${ativo}: ${b.lado ? "compra" : "venda"} de ${short(b.qty)} a ${fmt(
-          b.price
-        )}`,
-        b.lado ? UP : DOWN
-      );
-    }
-    v.baleia = b.chave;
-  }
 }
 
 /** The disagreement between the crowd and the size, when there is one. */
@@ -2203,7 +2160,124 @@ function lerMercado() {
   return frases;
 }
 
+// ---------------------------------------------------------------- varredura
+const SCAN_MS = 60000;
+const TEMPOS_SCAN = ["1m", "5m", "15m", "1h", "4h"];
+
+/**
+ * Runs the same reading across every timeframe of the asset on screen.
+ *
+ * An entry that is not there on the 5m may be forming on the 15m, and the
+ * panel only ever shows one chart. This looks at all of them and reports the
+ * one that confirms soonest, because that is the one with a deadline.
+ */
+async function escanear() {
+  if (state.escaneando) return;
+  state.escaneando = true;
+
+  const ativo = state.symbol;
+  const achados = [];
+
+  for (const tf of TEMPOS_SCAN) {
+    try {
+      const velas = await history(ativo, tf, 200);
+      if (!velas || velas.length < 60) continue;
+      if (state.symbol !== ativo) return; // trocou de ativo no meio
+
+      const flow = flowFromCandles(velas, FLOW_BARS[tf] || 12);
+      const r = analyse(velas, {
+        depth: state.depth,
+        zoneLimit: state.zones,
+        flow: flow ? { ...flow, total: flow.buy + flow.sell } : null,
+      });
+
+      if (r.plan && r.plan.side !== "fora") {
+        const aberta = velas[velas.length - 1];
+        achados.push({
+          tf,
+          side: r.plan.side,
+          score: r.score,
+          rr: r.plan.rr,
+          entrada: r.plan.entrada,
+          fecha: aberta.time + (TF_SECONDS[tf] || 60) * 1000,
+        });
+      }
+    } catch {
+      /* um tempo que falhou não derruba a varredura */
+    }
+  }
+
+  // the one closing soonest is the one that needs a decision first
+  achados.sort((a, b) => a.fecha - b.fecha);
+  state.scan = { achados, quando: Date.now(), tempos: TEMPOS_SCAN.length };
+  state.escaneando = false;
+}
+
+/** Time left on a bar, short enough to sit in a pill. */
+function curto(ms) {
+  const total = Math.max(0, Math.round(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  if (h) return `${h}h${String(m).padStart(2, "0")}`;
+  if (m) return `${m}min ${String(s).padStart(2, "0")}s`;
+  return `${s}s`;
+}
+
+let dicaAnterior = "";
+
+function pintarDica() {
+  const d = el("dica");
+  if (!d) return;
+
+  const scan = state.scan;
+  if (!scan) {
+    d.hidden = true;
+    return;
+  }
+
+  const achado = scan.achados[0];
+  let html;
+  let classe = "dica";
+
+  if (!achado) {
+    html = `<span class="dica-nada">sem entrada em ${scan.tempos} tempos</span>`;
+    classe += " quieta";
+  } else {
+    const falta = achado.fecha - Date.now();
+    const cor = achado.side === "compra" ? UP : DOWN;
+    const outros = scan.achados.length - 1;
+
+    html =
+      `<span class="dica-tf">${achado.tf}</span>` +
+      `<span class="dica-lado" style="color:${cor}">${achado.side.toUpperCase()}</span>` +
+      `<span class="dica-tempo">${
+        falta > 0 ? `confirma em ${curto(falta)}` : "fechando a barra"
+      }</span>` +
+      (outros > 0 ? `<span class="dica-mais">+${outros}</span>` : "");
+    classe += achado.side === "compra" ? " compra" : " venda";
+  }
+
+  if (html !== dicaAnterior) {
+    d.innerHTML = html;
+    dicaAnterior = html;
+  }
+  d.className = classe;
+  d.hidden = false;
+}
+
+/** Tapping the hint takes the panel to the timeframe that found something. */
+function irParaAchado() {
+  const achado = state.scan?.achados?.[0];
+  if (!achado || achado.tf === state.timeframe) return;
+
+  state.timeframe = achado.tf;
+  el("timeframe").value = achado.tf;
+  reload();
+}
+
 /** Ring colour: the panel's traffic light, readable from the corner. */
+
 function corDoMascote() {
   if (state.aberta) return state.aberta.side === "compra" ? UP : DOWN;
   if (state.pendente) return WARN;
@@ -2269,12 +2343,14 @@ function abrirBalao() {
 
 function ligarMascote() {
   el("mascote")?.addEventListener("click", abrirBalao);
+  el("dica")?.addEventListener("click", irParaAchado);
   el("balaoFechar")?.addEventListener("click", () => (el("balao").hidden = true));
 
   document.addEventListener("click", (e) => {
     const b = el("balao");
     if (b.hidden) return;
-    if (e.target.closest("#balao") || e.target.closest("#mascote")) return;
+    if (e.target.closest("#balao") || e.target.closest("#mascote") || e.target.closest("#dica"))
+      return;
     b.hidden = true;
   });
 
@@ -2291,8 +2367,10 @@ buildControls();
 status("", "conectando…");
 start();
 rodarBacktest();
+escanear();
 pullTape();
 setInterval(pullTape, 20000);
 setInterval(pullSpot, 30000);
 setInterval(pullDeep, DEEP_MS);
+setInterval(escanear, SCAN_MS);
 requestAnimationFrame(loop);

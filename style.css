@@ -19,6 +19,15 @@
   box-sizing: border-box;
 }
 
+/**
+ * The hidden attribute only carries a UA-level display:none, which any author
+ * rule beats — and several blocks here set display:flex. Without this, marking
+ * something hidden did nothing at all.
+ */
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   overflow-y: auto;
@@ -1692,5 +1701,94 @@ button {
     left: 12px;
     width: auto;
     bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* ---------- dica permanente do mascote ---------- */
+.dica {
+  position: fixed;
+  right: 96px;
+  bottom: calc(30px + env(safe-area-inset-bottom, 0px));
+  max-width: min(320px, calc(100vw - 120px));
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 11px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  z-index: 39;
+  animation: sobe 0.3s ease both;
+}
+
+.dica.compra {
+  border-color: rgba(47, 224, 138, 0.5);
+}
+
+.dica.venda {
+  border-color: rgba(255, 77, 99, 0.5);
+}
+
+.dica.quieta {
+  opacity: 0.55;
+}
+
+.dica-tf {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text);
+  background: var(--panel-2);
+  border-radius: 5px;
+  padding: 2px 6px;
+}
+
+.dica-lado {
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+.dica-tempo {
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.dica-nada {
+  color: var(--dim);
+}
+
+.dica-mais {
+  background: var(--panel-2);
+  border-radius: 8px;
+  padding: 1px 6px;
+  font-size: 10px;
+  color: var(--dim);
+}
+
+@media (max-width: 640px) {
+  .dica {
+    right: 80px;
+    bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+    max-width: calc(100vw - 100px);
+    font-size: 10px;
+    padding: 6px 9px;
+    gap: 5px;
+  }
+
+  .dica-tempo {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dica {
+    animation: none;
   }
 }
