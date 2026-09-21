@@ -3648,3 +3648,57 @@ button {
     min-height: 15px;
   }
 }
+
+
+/* ======================================================================
+   ESCALA DO PAINEL NO COMPUTADOR
+   ======================================================================
+   The panel was drawn at phone size — dozens of rules sit at 8.5 and 9 pixels
+   — and then stretched across a monitor, which is why it reads as low
+   resolution rather than as merely small.
+
+   Zoom on the whole subtree was tried and reverted: the chart measures its own
+   wrapper every frame to build its viewBox, and under zoom that measurement no
+   longer matches the box the SVG is laid out in, so the drawing came out
+   squashed — the viewBox ratio read 1.265 against a box of 1.157. Scaling the
+   type directly costs more rules and distorts nothing, and the chart keeps
+   sizing itself the way it already knew how. */
+@media (min-width: 1100px) {
+  .lbl { font-size: 11px; }
+  .tile .t { font-size: 10px; }
+  .tile .v { font-size: 19px; }
+  .part .name { font-size: 12px; }
+  .part .val { font-size: 11px; }
+  .sr-grid { font-size: 11.5px; }
+  .perfil-delta { font-size: 11px; }
+  .hist-res, .hist-score { font-size: 11px; }
+  .cfg-rotulo { font-size: 10.5px; }
+  .protegida { font-size: 10.5px; }
+  .rank-cab, .rank-pos { font-size: 11px; }
+  .comite-selo { font-size: 10px; }
+  .hora-rot { font-size: 10px; }
+  .dist-rot { font-size: 10.5px; }
+  .varre-topo, .varre-lado, .varre-canto { font-size: 10px; }
+
+  .book-cols span, .book-row { font-size: 12px; }
+  .book-row { padding-top: 2px; padding-bottom: 2px; }
+  .book-head { font-size: 11px; }
+
+  .plan-dir .word { font-size: 19px; }
+  .plan-estado { font-size: 12px; }
+  .deep-title { font-size: 12px; letter-spacing: 0.14em; }
+
+  /* the left column was the narrowest thing on a wide screen */
+  .side { min-width: 300px; }
+}
+
+@media (min-width: 1500px) {
+  .lbl { font-size: 12px; }
+  .tile .t { font-size: 11px; }
+  .tile .v { font-size: 21px; }
+  .part .name, .sr-grid, .book-cols span, .book-row { font-size: 13px; }
+  .m-val { font-size: 22px; }
+  .side { min-width: 340px; }
+  .deep-grid { column-gap: 16px; }
+  .deep-card { margin-bottom: 16px; }
+}
