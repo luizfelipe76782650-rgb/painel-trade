@@ -3588,3 +3588,63 @@ button {
 .lbl {
   letter-spacing: 0.02em;
 }
+
+/* ======================================================================
+   O DETALHE NO COMPUTADOR
+   ======================================================================
+   A grid puts every card in a row, and a row is as tall as its tallest
+   member — so one long block left the three beside it sitting over hundreds
+   of pixels of nothing. Measured on a 1461px screen the cards held 4319px of
+   content and the grid was 2061px tall across four columns, roughly double
+   what the content needed; the rest was gap.
+
+   Columns fix it without any script: each card flows to the bottom of one
+   column before the next begins, so a short card is followed immediately by
+   the next card rather than by empty space. The reading order becomes
+   top-to-bottom per column instead of left-to-right, which is how a wall of
+   independent panels is read anyway. */
+@media (min-width: 900px) {
+  .deep-grid {
+    display: block;
+    column-count: 3;
+    column-gap: 12px;
+  }
+
+  .deep-card {
+    break-inside: avoid;
+    -webkit-column-break-inside: avoid;
+    width: 100%;
+    margin-bottom: 12px;
+  }
+
+  /* labels stop being clipped: they wrap instead of ending in an ellipsis */
+  .m-rot {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    font-size: 9.5px;
+    line-height: 1.3;
+  }
+
+  .metricas { grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); }
+  .metrica { padding: 9px 10px; }
+
+  .deep { padding: 18px 20px 28px; }
+  .deep-title { font-size: 11px; }
+}
+
+@media (min-width: 1300px) {
+  .deep-grid { column-count: 4; }
+}
+
+@media (min-width: 1750px) {
+  .deep-grid { column-count: 5; }
+}
+
+/* the volume profile rows were touching; give the ladder room to be read */
+@media (min-width: 900px) {
+  .vp-linha,
+  .vp-row {
+    min-height: 15px;
+  }
+}
