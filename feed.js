@@ -127,6 +127,15 @@ export const CATEGORIES = [
 export const TF_SECONDS = { "1m": 60, "5m": 300, "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400 };
 const SECONDS = TF_SECONDS;
 
+/**
+ * Bars handed to the analysis, the same from every source.
+ *
+ * The zones come from pivots over the window, so a shorter window finds fewer
+ * levels and rejects trades the longer one would take. Live, scan and backtest
+ * all read this number, so all three judge the same market.
+ */
+export const JANELA = 400;
+
 async function getJson(url) {
   const res = await fetch(url);
   if (!res.ok) throw new Error(String(res.status));
@@ -140,7 +149,7 @@ const binance = {
 
   async candles(sym, tf) {
     const raw = await getJson(
-      `https://api.binance.com/api/v3/klines?symbol=${sym}&interval=${tf}&limit=150`
+      `https://api.binance.com/api/v3/klines?symbol=${sym}&interval=${tf}&limit=${JANELA}`
     );
     // k[9] is taker buy volume, so the rest of the bar's volume was sold into
     // the bid: real per-candle delta, not an inference from the candle's colour
@@ -199,7 +208,7 @@ const coinbase = {
         volume: +c[5],
       }))
       .reverse()
-      .slice(-150);
+      .slice(-JANELA);
   },
 
   async stats(sym) {
@@ -247,7 +256,7 @@ const kraken = {
         close: +r[4],
         volume: +r[6],
       }))
-      .slice(-150);
+      .slice(-JANELA);
   },
 
   async stats(sym) {
@@ -294,7 +303,7 @@ const futures = {
   key: "futures",
 
   async candles(sym, tf) {
-    const raw = await getJson(`${FAPI}/klines?symbol=${sym}&interval=${tf}&limit=300`);
+    const raw = await getJson(`${FAPI}/klines?symbol=${sym}&interval=${tf}&limit=${JANELA}`);
     return raw.map((k) => {
       const volume = +k[5];
       const buy = +k[9];

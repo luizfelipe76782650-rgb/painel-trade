@@ -412,7 +412,10 @@ export function buildPlan(price, a, score, sup, res, zones = []) {
  * assumed to fill at the level. Treat it as calibration, not proof.
  */
 export function backtest(candles, opts = {}) {
-  const { depth = 0.5, zoneLimit = 6, flowBars = 18, warmup = 200 } = opts;
+  // the window has to match the one the live panel reads, or this measures a
+  // strategy nobody is running
+  const { depth = 0.5, zoneLimit = 6, flowBars = 18, janela = 400 } = opts;
+  const warmup = janela;
 
   if (candles.length < warmup + 40) return null;
 
@@ -422,10 +425,10 @@ export function backtest(candles, opts = {}) {
   let r = 0;
 
   for (let i = warmup; i < candles.length; i++) {
-    const janela = candles.slice(0, i);
+    const vista = candles.slice(Math.max(0, i - janela), i);
 
     if (aberta) {
-      const fim = acompanharStop(aberta, janela, aberta.atr, pivots(janela));
+      const fim = acompanharStop(aberta, vista, aberta.atr, pivots(vista));
       aberta.stop = fim.stop;
 
       if (fim.resultado) {
@@ -437,15 +440,15 @@ export function backtest(candles, opts = {}) {
       continue;
     }
 
-    const flow = flowFromCandles(janela, flowBars);
-    const res = analyse(janela, {
+    const flow = flowFromCandles(vista, flowBars);
+    const res = analyse(vista, {
       depth,
       zoneLimit,
       flow: flow ? { ...flow, total: flow.buy + flow.sell } : null,
     });
 
     if (res.plan && res.plan.side !== "fora") {
-      const ultima = janela[janela.length - 1];
+      const ultima = vista[vista.length - 1];
       aberta = {
         ...res.plan,
         stopInicial: res.plan.stop,

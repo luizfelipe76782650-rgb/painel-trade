@@ -10,9 +10,10 @@ import {
   varrer,
   volumeProfile,
   zoneStats,
-} from "./analysis.js?v=16";
+} from "./analysis.js?v=17";
 import {
   CATEGORIES,
+  JANELA,
   assetSource,
   history,
   SYMBOLS,
@@ -24,7 +25,7 @@ import {
   spotGold,
   tape,
   universe,
-} from "./feed.js?v=16";
+} from "./feed.js?v=17";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const el = (id) => document.getElementById(id);
@@ -2278,7 +2279,7 @@ async function escanear() {
         // a request that never settles would otherwise hold the scan open and,
         // with it, the lock that keeps the next one from starting
         const velas = await Promise.race([
-          history(ativo, tf, 200),
+          history(ativo, tf, JANELA),
           new Promise((ok) => setTimeout(() => ok(null), 8000)),
         ]);
 
