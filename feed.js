@@ -70,7 +70,6 @@ export const CATEGORIES = [
     assets: ["f:XAU", "f:XAG", "f:XPT", "f:XPD", "f:COPPER"],
   },
   { id: "energia", classe: "Commodities", label: "Energia", assets: ["f:CL", "f:BZ", "f:NATGAS"] },
-  { id: "ourotoken", classe: "Commodities", label: "Ouro tokenizado", assets: ["PAXG", "XAUT"] },
 
   {
     id: "acoestec",
