@@ -715,7 +715,8 @@ function paint() {
   shown.buy = approach(shown.buy, flow.buy, EASE_SLOW);
   shown.sell = approach(shown.sell, flow.sell, EASE_SLOW);
 
-  R.chartSym.textContent = state.symbol;
+  // the "f:" prefix keeps futures ids unique internally; it is not a ticker
+  R.chartSym.textContent = state.symbol.replace(/^f:/, "");
   paintHeader(data, result);
   paintGauge();
   paintBars();
