@@ -3772,3 +3772,64 @@ body {
     border-color: var(--line-soft);
   }
 }
+
+/* ======================================================================
+   A COLUNA DA ESQUERDA NO COMPUTADOR
+   ======================================================================
+   The reasons the panel gives for its reading are sentences — "Preço colado em
+   resistência", "Agressão compradora 58%" — and they were living in a 108px
+   monospace slot with an ellipsis. Measured on a 1600px screen that one needed
+   296 pixels and had 108: two thirds of the sentence was simply gone, which is
+   the worst possible thing to cut, since the reason IS the product.
+
+   On a wide screen the name moves onto its own line above its bar, so it never
+   has to be cut again, and it is set in the reading face like every other
+   sentence in the panel. */
+@media (min-width: 1100px) {
+  .part {
+    display: grid;
+    grid-template-columns: 1fr 34px;
+    grid-template-areas:
+      "nome nome"
+      "trilho valor";
+    row-gap: 3px;
+    column-gap: 8px;
+    align-items: center;
+    min-height: 0;
+    padding: 3px 0;
+  }
+
+  .part .name {
+    grid-area: nome;
+    width: auto;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    font-family: var(--prosa);
+    font-size: 12.5px;
+    line-height: 1.35;
+    color: var(--muted);
+  }
+
+  .part .track { grid-area: trilho; height: 5px; }
+  .part .val { grid-area: valor; width: auto; font-size: 11px; }
+
+  .parts { gap: 2px; }
+
+  /* the support and resistance table had the same problem, smaller */
+  .sr-grid { font-size: 12.5px; line-height: 1.5; }
+
+  /* one concrete line per tile: a sentence, so it reads as one */
+  .caminho-linha {
+    font-family: var(--prosa);
+    font-size: 12px;
+    letter-spacing: 0;
+  }
+
+  .inicio-sub { font-family: var(--prosa); font-size: 12px; }
+}
+
+@media (min-width: 1500px) {
+  .part .name { font-size: 13px; }
+  .side { min-width: 380px; }
+}
