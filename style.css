@@ -25,7 +25,7 @@
   --info: #6f9bff;
 
   /* prosa em sans; número e rótulo continuam em mono */
-  --prosa: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --prosa: "Archivo", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
 * {
@@ -48,7 +48,7 @@ body {
   text-size-adjust: 100%;
   background: var(--bg);
   color: var(--text);
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-family: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
 }
 
 button {
@@ -177,7 +177,7 @@ button {
 }
 
 .lbl {
-  font-family: "Space Grotesk", sans-serif;
+  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
   font-size: 9px;
   letter-spacing: 0.1em;
   color: var(--dim);
@@ -201,7 +201,7 @@ button {
 }
 
 .chart-head .sym {
-  font-family: "Space Grotesk", sans-serif;
+  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
   font-size: 16px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -371,7 +371,7 @@ button {
   right: 0;
   top: 44px;
   text-align: center;
-  font-family: "Space Grotesk", sans-serif;
+  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
   font-size: 27px;
   font-weight: 700;
 }
@@ -429,7 +429,7 @@ button {
 }
 
 .plan-dir .word {
-  font-family: "Space Grotesk", sans-serif;
+  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
   font-size: 22px;
   font-weight: 700;
   letter-spacing: 0.05em;
@@ -524,7 +524,7 @@ button {
 }
 
 .plan-wait-head {
-  font-family: "Space Grotesk", sans-serif;
+  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -548,7 +548,7 @@ button {
 }
 
 .plan-result {
-  font-family: "Space Grotesk", sans-serif;
+  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -935,7 +935,7 @@ button {
 }
 
 .deep-title {
-  font-family: "Space Grotesk", sans-serif;
+  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.18em;
@@ -1479,7 +1479,7 @@ button {
 /* enquanto a imagem não chega */
 .mascote.vazio .mascote-corpo::after {
   content: "?";
-  font-family: "Space Grotesk", sans-serif;
+  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
   font-size: 26px;
   font-weight: 700;
   color: #14b8a6;
@@ -1582,7 +1582,7 @@ button {
   border-radius: 10px;
   background: var(--down);
   color: #fff;
-  font-family: "Space Grotesk", sans-serif;
+  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
   font-size: 11px;
   font-weight: 700;
   line-height: 20px;
@@ -1744,7 +1744,7 @@ button {
   border: 1px solid var(--line);
   background: var(--panel);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-family: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
   font-size: 11px;
   color: var(--muted);
   white-space: nowrap;
@@ -1798,7 +1798,7 @@ button {
 }
 
 .dica-tf {
-  font-family: "Space Grotesk", sans-serif;
+  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -1890,7 +1890,7 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: "Space Grotesk", sans-serif;
+  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
   font-size: 9px;
   font-weight: 700;
   color: var(--dim);
@@ -1957,7 +1957,7 @@ button {
 }
 
 .modal-titulo {
-  font-family: "Space Grotesk", sans-serif;
+  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.16em;
@@ -1985,7 +1985,7 @@ button {
 }
 
 .cfg-rotulo {
-  font-family: "Space Grotesk", sans-serif;
+  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
   font-size: 9px;
   letter-spacing: 0.12em;
   color: var(--dim);
@@ -2007,7 +2007,7 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: "Space Grotesk", sans-serif;
+  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
   font-size: 20px;
   font-weight: 700;
   color: var(--dim);
@@ -2141,7 +2141,7 @@ button {
 }
 
 .protegida {
-  font-family: "Space Grotesk", sans-serif;
+  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
   font-size: 8.5px;
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -2159,7 +2159,7 @@ button {
 
 /* ---------- ficha do ativo ---------- */
 .veredito {
-  font-family: "Space Grotesk", sans-serif;
+  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -2310,7 +2310,7 @@ button {
 }
 
 .eq-linha b {
-  font-family: "Space Grotesk", sans-serif;
+  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
   font-size: 16px;
   color: var(--text);
 }
@@ -2587,7 +2587,7 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: "Space Grotesk", sans-serif;
+  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
   font-size: 14px;
   font-weight: 700;
   color: var(--dim);
@@ -2602,7 +2602,7 @@ button {
 }
 
 .inicio-ola {
-  font-family: "Space Grotesk", sans-serif;
+  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
   font-size: 15px;
   font-weight: 600;
   color: var(--text);
@@ -2672,7 +2672,7 @@ button {
 }
 
 .caminho-titulo {
-  font-family: "Space Grotesk", sans-serif;
+  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
   font-size: 15px;
   font-weight: 600;
   line-height: 1.25;
@@ -2748,7 +2748,7 @@ button {
 .hero-quem { display: flex; align-items: baseline; gap: 7px; }
 
 .hero-ativo {
-  font-family: "Space Grotesk", sans-serif;
+  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
   font-size: 19px;
   font-weight: 700;
   letter-spacing: 0.01em;
@@ -2767,7 +2767,7 @@ button {
 .hero-preco { display: flex; align-items: baseline; gap: 8px; }
 
 .hero-valor {
-  font-family: "Space Grotesk", sans-serif;
+  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
   font-size: 22px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -2945,7 +2945,7 @@ button {
 }
 
 .mc-tit {
-  font-family: "Space Grotesk", sans-serif;
+  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
   font-size: 13px;
   font-weight: 600;
   margin-bottom: 8px;
@@ -3108,7 +3108,7 @@ button {
 .sent-medidor { text-align: center; margin-bottom: 14px; }
 
 .sent-num {
-  font-family: "Space Grotesk", sans-serif;
+  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
   font-size: 40px;
   font-weight: 700;
   line-height: 1;
@@ -3283,7 +3283,7 @@ button {
 }
 
 .mesa-par strong {
-  font-family: "Space Grotesk", sans-serif;
+  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
   font-size: 14px;
   font-weight: 600;
 }
@@ -3381,7 +3381,7 @@ button {
 }
 
 .choque-resumo-val {
-  font-family: "Space Grotesk", sans-serif;
+  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
   font-size: 17px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -3473,7 +3473,7 @@ button {
 .pf-cab .m-rot,
 .choque-cab,
 .sent-cab {
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-family: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
 }
 
 /* every figure keeps its own tabular mono so columns stay aligned */
@@ -4022,3 +4022,141 @@ body.arrastando * {
   -webkit-user-select: text;
   user-select: text;
 }
+
+/* ======================================================================
+   OS NÚMEROS DO PLANO
+   ======================================================================
+   Entry, stop and target sit three across a column roughly 340 pixels wide,
+   which leaves each one about 86 pixels of room. A price like 85.848,13 is
+   nine characters, and at the 21px I had given them that is a hundred and
+   sixteen — so the numbers were simply cut in half: "84.830,2", "83.926,6".
+
+   They are sized to what actually fits, and the whole thing is allowed to
+   shrink rather than clip if a longer price ever turns up. A figure that is
+   large and wrong is worth less than one that is small and complete. */
+@media (min-width: 1100px) {
+  .tile .v { font-size: 15px; }
+  .tile { padding: 7px 8px; }
+}
+
+@media (min-width: 1500px) {
+  .tile .v { font-size: 17px; }
+}
+
+/* nothing here may be clipped: the number is the whole point of the tile */
+.tile .v,
+.m-val,
+.hero-valor {
+  min-width: 0;
+  overflow: visible;
+  white-space: nowrap;
+  letter-spacing: -0.01em;
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+/* Two more of my own inflations, each overflowing by a couple of pixels:
+   an R figure needed 91 in an 88 wide box, the aggression label 60 in 58. */
+@media (min-width: 900px) {
+  .m-val { font-size: 18px; }
+}
+
+@media (min-width: 1500px) {
+  .m-val { font-size: 20px; }
+}
+
+.agg-lado,
+.agg-rot,
+.agg span {
+  letter-spacing: 0.01em;
+}
+
+/* The book's column headers carry 0.9px of tracking, which at the size I gave
+   them pushed COMPRA two pixels past its box. The tracking goes, not the size:
+   these are three fixed words and they do not need to be spaced out to be read. */
+@media (min-width: 900px) {
+  .book-cols span { letter-spacing: 0; font-size: 12px; }
+}
+
+/* ======================================================================
+   AS LETRAS
+   ======================================================================
+   Inter with Space Grotesk is the most predictable pairing on the web, and a
+   panel about money deserves a face chosen for what it has to do.
+
+   Archivo carries the words: a grotesque built for signage, slightly narrow
+   and squared off, which holds its shape at eleven pixels on a dark ground
+   where a softer face goes to mush. Its heavier weights have real presence,
+   so headings stop needing a second family to look like headings.
+
+   JetBrains Mono carries every figure. It was drawn for people staring at
+   characters all day, and its digits are the point: a zero that cannot be an
+   O, a one that cannot be an l, and the same advance width as the face it
+   replaces — so every column measured to fit still fits. */
+.lbl,
+.m-rot,
+.deep-title,
+.cfg-rotulo {
+  font-weight: 600;
+}
+
+/* Archivo runs a touch tighter than Inter, so headings get their space back */
+.caminho-titulo,
+.mc-tit,
+.inicio-ola,
+.plan-dir .word {
+  letter-spacing: -0.01em;
+}
+
+/* the slashed zero is the whole reason to pick a mono for money */
+.m-val,
+.tile .v,
+.hero-valor,
+.sent-num,
+.book-row,
+.cap-usd,
+.cap-sobra,
+.carrega-val,
+.mc-cel,
+.choque-resumo-val,
+.sr-grid,
+.part .val {
+  font-feature-settings: "tnum" 1, "zero" 1, "ss01" 1;
+}
+
+/* The reasons were unstacked on the desktop only, so on a phone they were
+   still being cut at 96 pixels — "Preço colado em resi…", "Houve sweep de
+   liqui…". The reason the panel gives is the thing being sold; it is never the
+   part to trim. Same layout everywhere, just smaller. */
+.part {
+  display: grid;
+  grid-template-columns: 1fr 30px;
+  grid-template-areas:
+    "nome nome"
+    "trilho valor";
+  row-gap: 3px;
+  column-gap: 7px;
+  align-items: center;
+  min-height: 0;
+  padding: 3px 0;
+}
+
+.part .name {
+  grid-area: nome;
+  width: auto;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  font-family: var(--prosa);
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+.part .track { grid-area: trilho; }
+.part .val { grid-area: valor; width: auto; }
