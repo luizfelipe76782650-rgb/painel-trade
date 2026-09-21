@@ -15,7 +15,7 @@ import {
   varrer,
   volumeProfile,
   zoneStats,
-} from "./analysis.js?v=37";
+} from "./analysis.js?v=38";
 import {
   capacidade,
   choques,
@@ -24,7 +24,7 @@ import {
   monteCarlo,
   riscoDaCarteira,
   volTermo,
-} from "./mesa.js?v=37";
+} from "./mesa.js?v=38";
 import {
   CATEGORIES,
   JANELA,
@@ -39,7 +39,7 @@ import {
   spotGold,
   tape,
   universe,
-} from "./feed.js?v=37";
+} from "./feed.js?v=38";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const el = (id) => document.getElementById(id);
@@ -1561,41 +1561,11 @@ function mountDeep() {
         <div id="fichaBody" class="deep-body"></div>
       </div>
 
-      <div class="card deep-card" id="cardSent">
-        <div class="plan-head"><span class="lbl">SENTIMENTO DO MERCADO</span>
-          <span class="muted" id="sentInfo">—</span></div>
-        <div id="sentBody" class="deep-body"></div>
-      </div>
 
-      <div class="card deep-card" id="cardMonte">
-        <div class="plan-head"><span class="lbl">MONTE CARLO</span>
-          <span class="muted" id="monteInfo">—</span></div>
-        <div id="monteBody" class="deep-body"></div>
-      </div>
 
-      <div class="card deep-card" id="cardCap">
-        <div class="plan-head"><span class="lbl">CAPACIDADE E IMPACTO</span>
-          <span class="muted" id="capInfo">—</span></div>
-        <div id="capBody" class="deep-body"></div>
-      </div>
 
-      <div class="card deep-card" id="cardMesa">
-        <div class="plan-head"><span class="lbl">MESA DE RISCO</span>
-          <span class="muted" id="mesaInfo">—</span></div>
-        <div id="mesaBody" class="deep-body"></div>
-      </div>
 
-      <div class="card deep-card" id="cardLado">
-        <div class="plan-head"><span class="lbl">QUEM ESTÁ DO OUTRO LADO</span>
-          <span class="muted" id="ladoInfo">—</span></div>
-        <div id="ladoBody" class="deep-body"></div>
-      </div>
 
-      <div class="card deep-card" id="cardChoque">
-        <div class="plan-head"><span class="lbl">CHOQUES E VOLATILIDADE</span>
-          <span class="muted" id="choqueInfo">—</span></div>
-        <div id="choqueBody" class="deep-body"></div>
-      </div>
 
       <div class="card deep-card" id="cardMapa">
         <div class="plan-head">
@@ -1645,6 +1615,48 @@ function mountDeep() {
         <div id="sessaoBody" class="deep-body"></div>
       </div>
     </div>`;
+
+  /**
+   * The desk screens live outside the panel.
+   *
+   * They are not chart detail and do not belong under the chart — a path opens
+   * each one on its own, and this holder is only where they wait. It stays
+   * hidden, so the blocks are never a second copy of anything on screen.
+   */
+  const telas = document.createElement("div");
+  telas.id = "telas";
+  telas.hidden = true;
+  telas.innerHTML = `      <div class="card deep-card" id="cardSent">
+        <div class="plan-head"><span class="lbl">SENTIMENTO DO MERCADO</span>
+          <span class="muted" id="sentInfo">—</span></div>
+        <div id="sentBody" class="deep-body"></div>
+      </div>
+      <div class="card deep-card" id="cardMonte">
+        <div class="plan-head"><span class="lbl">MONTE CARLO</span>
+          <span class="muted" id="monteInfo">—</span></div>
+        <div id="monteBody" class="deep-body"></div>
+      </div>
+      <div class="card deep-card" id="cardCap">
+        <div class="plan-head"><span class="lbl">CAPACIDADE E IMPACTO</span>
+          <span class="muted" id="capInfo">—</span></div>
+        <div id="capBody" class="deep-body"></div>
+      </div>
+      <div class="card deep-card" id="cardMesa">
+        <div class="plan-head"><span class="lbl">MESA DE RISCO</span>
+          <span class="muted" id="mesaInfo">—</span></div>
+        <div id="mesaBody" class="deep-body"></div>
+      </div>
+      <div class="card deep-card" id="cardLado">
+        <div class="plan-head"><span class="lbl">QUEM ESTÁ DO OUTRO LADO</span>
+          <span class="muted" id="ladoInfo">—</span></div>
+        <div id="ladoBody" class="deep-body"></div>
+      </div>
+      <div class="card deep-card" id="cardChoque">
+        <div class="plan-head"><span class="lbl">CHOQUES E VOLATILIDADE</span>
+          <span class="muted" id="choqueInfo">—</span></div>
+        <div id="choqueBody" class="deep-body"></div>
+      </div>`;
+  document.body.appendChild(telas);
 
   ["posSym", "posBody", "perfilInfo", "perfilBody", "placarInfo", "placarBody",
    "sessaoInfo", "sessaoBody", "btInfo", "btBody", "baleiaInfo", "baleiaBody", "fichaInfo", "fichaBody", "rankInfo", "rankBody", "labInfo", "labBody", "comiteInfo", "comiteBody", "mapaInfo", "mapaBody", "monteInfo", "monteBody", "capInfo", "capBody", "mesaInfo", "mesaBody", "ladoInfo", "ladoBody", "choqueInfo", "choqueBody", "sentInfo", "sentBody"].forEach((id) => (R[id] = el(id)));
@@ -2729,7 +2741,7 @@ const config = {
     comite: false,
     venderTambem: false,
     taxa: 0.0002,
-    cards: { pos: true, perfil: true, bt: true, sent: true, monte: true, cap: true, mesa: true, lado: true, choque: true, mapa: true, ficha: true, comite: true, lab: true, rank: true, baleia: true, placar: true, sessao: true },
+    cards: { pos: true, perfil: true, bt: true, mapa: true, ficha: true, comite: true, lab: true, rank: true, baleia: true, placar: true, sessao: true },
   },
 
   atual: null,
@@ -2803,12 +2815,6 @@ function aplicarConfig() {
   mostra("cardRank", c.cards.rank !== false);
   OPERA.venda = c.venderTambem === true;
 
-  mostra("cardSent", c.cards.sent !== false);
-  mostra("cardMonte", c.cards.monte !== false);
-  mostra("cardCap", c.cards.cap !== false);
-  mostra("cardMesa", c.cards.mesa !== false);
-  mostra("cardLado", c.cards.lado !== false);
-  mostra("cardChoque", c.cards.choque !== false);
   mostra("cardMapa", c.cards.mapa !== false);
   mostra("cardComite", c.cards.comite !== false);
   mostra("cardLab", c.cards.lab !== false);
@@ -3972,50 +3978,10 @@ const CAMINHOS = [
     icone: `<path d="M3 17l6-6 4 4 8-8"/><path d="M21 7v6h-6"/>`,
   },
   {
-    id: "cardMapa",
-    titulo: "Mapa do ativo",
-    conta: "Em qual tempo gráfico este ativo pagou, e em qual ele custou dinheiro.",
-    linha: "Os cinco tempos medidos lado a lado",
-    cor: "#5c8cff",
-    icone: `<rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/>`,
-  },
-  {
-    id: "cardRank",
-    titulo: "Ranking dos ativos",
-    conta: "Quais ativos o painel lê melhor, medidos um contra o outro.",
-    linha: "Do que mais rende ao que mais custa",
-    cor: "#f5b72a",
-    icone: `<path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3"/><path d="M7 5H4v2a3 3 0 0 0 3 3"/>`,
-  },
-  {
-    id: "cardBt",
-    titulo: "Medição da estratégia",
-    conta: "O que esta leitura teria feito no histórico, com a corretagem descontada.",
-    linha: "Quanto precisa acertar e quanto acerta",
-    cor: "#2fe08a",
-    icone: `<path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/>`,
-  },
-  {
-    id: "cardLab",
-    titulo: "Laboratório de ideias",
-    conta: "Cinco formas de entrar, testadas nas duas metades do histórico separadas.",
-    linha: "Uma ideia que só ganha numa metade não passa",
-    cor: "#b47cf0",
-    icone: `<path d="M9 3h6"/><path d="M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3"/>`,
-  },
-  {
-    id: "conta",
-    titulo: "Minha conta",
-    conta: "Nome, foto, corretagem, voz e quais blocos aparecem na tela.",
-    linha: "A taxa escolhida entra em toda medição",
-    cor: "#8fa39b",
-    icone: `<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>`,
-  },
-  {
     id: "cardSent",
     titulo: "Sentimento do mercado",
     conta: "O medo e a ganância de hoje — e o que cada faixa rendeu na semana seguinte.",
-    linha: "992 semanas medidas desde 2018",
+    linha: "3.151 dias medidos desde 2018",
     cor: "#ff9f5c",
     icone: `<circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0"/><path d="M9 9h.01M15 9h.01"/>`,
   },
@@ -4057,16 +4023,17 @@ const CAMINHOS = [
     conta: "As barras em que algo aconteceu, o tamanho do susto e o que veio depois.",
     linha: "Lido da fita, sem manchete",
     cor: "#f5b72a",
+    largo: true,
     icone: `<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>`,
   },
   {
-    id: "cardPlacar",
-    titulo: "Placar das operações",
-    conta: "O que o painel chamou desde que você abriu, e como cada uma terminou.",
-    linha: "O seu resultado, não a promessa de ninguém",
-    cor: "#ff7a88",
+    id: "conta",
+    titulo: "Minha conta",
+    conta: "Nome, foto, corretagem, voz e quais blocos aparecem embaixo do gráfico.",
+    linha: "A taxa escolhida entra em toda medição",
+    cor: "#8fa39b",
     largo: true,
-    icone: `<path d="M3 6h18M3 12h18M3 18h12"/>`,
+    icone: `<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>`,
   },
 ];
 
@@ -4239,13 +4206,6 @@ function irPara(destino) {
   if (!cartao) return;
 
   // a block switched off in the settings still opens from here
-  if (cartao.hidden) {
-    const chave = destino.replace(/^card/, "").toLowerCase();
-    const c = config.load();
-    config.save({ cards: { ...c.cards, [chave]: true } });
-    aplicarConfig();
-  }
-
   fecharSub();
 
   subMarcador = document.createComment("cartao em uso");
