@@ -10,7 +10,7 @@ import {
   varrer,
   volumeProfile,
   zoneStats,
-} from "./analysis.js?v=13";
+} from "./analysis.js?v=14";
 import {
   CATEGORIES,
   assetSource,
@@ -24,7 +24,7 @@ import {
   spotGold,
   tape,
   universe,
-} from "./feed.js?v=13";
+} from "./feed.js?v=14";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const el = (id) => document.getElementById(id);
@@ -2758,9 +2758,26 @@ function ligarConta() {
  * short tone, so the timing and the triggers can be tested now and the voice
  * dropped in later without touching anything here.
  */
+/** What the panel says, and the file that will one day replace each line. */
+const FRASES = {
+  entrada_compra: "Entrada de compra confirmada.",
+  entrada_venda: "Entrada de venda confirmada.",
+  stop_empate: "Mova o stop para o preço de entrada.",
+  stop_ajustado: "Stop ajustado. Operação protegida.",
+  alvo: "Alvo atingido.",
+  stop: "Stop atingido.",
+};
+
+/** Recordings already in the repository; these win over the synthesiser. */
+const COM_ARQUIVO = new Set();
+
+// the API says nothing about gender, so the choice is made by name
+const MASCULINAS = ["daniel", "felipe", "ricardo", "julio", "júlio", "antonio", "antônio", "eddy"];
+const FEMININAS = ["maria", "luciana", "joana", "fernanda", "camila", "francisca", "helena"];
+
 const voz = {
   ctx: null,
-  liberado: false,
+  voz: null,
   faltando: new Set(),
   ultima: 0,
 
@@ -2773,18 +2790,39 @@ const voz = {
     try {
       if (!voz.ctx) voz.ctx = new (window.AudioContext || window.webkitAudioContext)();
       if (voz.ctx.state === "suspended") voz.ctx.resume?.();
-      voz.liberado = voz.ctx.state === "running";
     } catch {
       voz.ctx = null;
     }
+    voz.escolher();
   },
 
-  /** What a test should report back: file, tone, or blocked. */
+  /** Picks a Brazilian male voice, falling back through what exists. */
+  escolher() {
+    if (voz.voz || !("speechSynthesis" in window)) return voz.voz;
+
+    const todas = speechSynthesis
+      .getVoices()
+      .filter((v) => v.lang.toLowerCase().startsWith("pt"))
+      .sort((a, b) => (b.lang.toLowerCase() === "pt-br") - (a.lang.toLowerCase() === "pt-br"));
+
+    if (!todas.length) return null;
+
+    const nome = (v) => v.name.toLowerCase();
+    voz.voz =
+      todas.find((v) => MASCULINAS.some((m) => nome(v).includes(m))) ||
+      todas.find((v) => !FEMININAS.some((f) => nome(v).includes(f))) ||
+      todas[0];
+
+    return voz.voz;
+  },
+
+  /** What a test should report back. */
   estado() {
     if (!config.load().som) return "desligado nas configurações";
+    if (voz.voz) return `voz: ${voz.voz.name}`;
     if (!voz.ctx) return "o navegador não deixou abrir o som";
     if (voz.ctx.state !== "running") return "aguardando um toque na tela";
-    return "tocando tons (sem arquivos de voz ainda)";
+    return "sem voz em português — tocando tons";
   },
 
   tom(tipo) {
@@ -2802,7 +2840,7 @@ const voz = {
       vol.gain.exponentialRampToValueAtTime(0.0001, agora + i * 0.14 + 0.18);
       osc.connect(vol).connect(voz.ctx.destination);
       osc.start(agora + i * 0.14);
-      osc.stop(agora + i * 0.14 + 0.15);
+      osc.stop(agora + i * 0.14 + 0.2);
     });
   },
 
@@ -2815,20 +2853,49 @@ const voz = {
     if (agora - voz.ultima < 700) return;
     voz.ultima = agora;
 
-    if (voz.faltando.has(chave)) return voz.tom(tipo);
+    if (COM_ARQUIVO.has(chave) && !voz.faltando.has(chave)) {
+      const audio = new Audio(`./voz/${chave}.mp3`);
+      audio.volume = 0.95;
+      audio.addEventListener("error", () => {
+        voz.faltando.add(chave);
+        voz.dizer(chave, tipo);
+      });
+      audio.play().catch(() => {
+        voz.faltando.add(chave);
+        voz.dizer(chave, tipo);
+      });
+      return;
+    }
 
-    const audio = new Audio(`./voz/${chave}.mp3`);
-    audio.volume = 0.9;
-    audio.addEventListener("error", () => {
-      voz.faltando.add(chave); // não tenta de novo nesta sessão
+    voz.dizer(chave, tipo);
+  },
+
+  dizer(chave, tipo) {
+    const frase = FRASES[chave];
+    const escolhida = voz.escolher();
+
+    if (!frase || !escolhida) return voz.tom(tipo);
+
+    try {
+      speechSynthesis.cancel(); // uma fala nova cancela a anterior
+      const fala = new SpeechSynthesisUtterance(frase);
+      fala.voice = escolhida;
+      fala.lang = escolhida.lang;
+      fala.rate = 1;
+      fala.pitch = 0.95;
+      fala.volume = 1;
+      fala.onerror = () => voz.tom(tipo);
+      speechSynthesis.speak(fala);
+    } catch {
       voz.tom(tipo);
-    });
-    audio.play().catch(() => {
-      voz.faltando.add(chave);
-      voz.tom(tipo);
-    });
+    }
   },
 };
+
+if ("speechSynthesis" in window) {
+  speechSynthesis.onvoiceschanged = () => voz.escolher();
+  voz.escolher();
+}
 
 ["pointerdown", "touchend", "click", "keydown"].forEach((evento) =>
   document.addEventListener(evento, () => voz.liberar(), { passive: true })
