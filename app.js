@@ -12,7 +12,7 @@ import {
   varrer,
   volumeProfile,
   zoneStats,
-} from "./analysis.js?v=22";
+} from "./analysis.js?v=23";
 import {
   CATEGORIES,
   JANELA,
@@ -27,7 +27,7 @@ import {
   spotGold,
   tape,
   universe,
-} from "./feed.js?v=22";
+} from "./feed.js?v=23";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const el = (id) => document.getElementById(id);

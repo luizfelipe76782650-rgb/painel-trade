@@ -572,6 +572,17 @@ export function varrer(candles, flowBars, zonas = [0.2, 0.4, 0.6, 0.8, 1.2, 1.6]
  * result depend only on the candles — the live panel and the backtest run the
  * same code and cannot drift apart.
  */
+/**
+ * How far behind the swing the trailing stop sits, in ATR.
+ *
+ * It began at 0.15 and was arbitrary. Measured across two independent groups
+ * of assets, loosening it to 0.6 improved the result by about the same amount
+ * in both (+0.025R per trade) — the only change tonight that moved the same
+ * way on assets it was not chosen on. The reason is mechanical: a stop pressed
+ * against the pivot is taken out by noise, turning winners into small losses.
+ */
+const FOLGA_STOP = 0.6;
+
 export function acompanharStop(t, candles, a, pivos) {
   const long = t.side === "compra";
   const stopInicial = t.stopInicial ?? t.stop;
@@ -625,7 +636,9 @@ export function acompanharStop(t, candles, a, pivos) {
         const idx = lista[k];
         if (idx + 3 > i) continue; // ainda não confirmado nesta barra
 
-        const nivel = long ? candles[idx].low - a * 0.15 : candles[idx].high + a * 0.15;
+        const nivel = long
+          ? candles[idx].low - a * FOLGA_STOP
+          : candles[idx].high + a * FOLGA_STOP;
         const melhora = long ? nivel > stop : nivel < stop;
         // a stop already past the price would close the trade on the spot
         const cabe = long ? nivel < c.close : nivel > c.close;
