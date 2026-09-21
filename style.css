@@ -3833,3 +3833,36 @@ body {
   .part .name { font-size: 13px; }
   .side { min-width: 380px; }
 }
+
+/* ======================================================================
+   LUGAR PARA O BOTÃO DE INÍCIO
+   ======================================================================
+   The home button floats fixed at the top left corner, and the price tape runs
+   the full width of that same corner — so the button sat on the prices and the
+   first ticker of the strip disappeared underneath it. Measured: the button
+   occupies 16 to 60 pixels across and 16 to 60 down; the tape runs from 10 to
+   24 starting at zero.
+
+   The strip gets a gutter the width of the button so nothing ever passes under
+   it, and the button drops just below the strip so the corner is shared rather
+   than fought over. */
+.tape-strip {
+  padding-left: 62px;
+}
+
+.aba-btn {
+  top: calc(30px + env(safe-area-inset-top, 0px));
+  width: 40px;
+  height: 40px;
+  left: 12px;
+}
+
+@media (min-width: 900px) {
+  .tape-strip { padding-left: 74px; }
+  .aba-btn { width: 46px; height: 46px; left: 16px; }
+}
+
+/* the mascot's own corner, so the two never crowd the same edge */
+@media (max-width: 420px) {
+  .tape-strip { padding-left: 56px; }
+}
