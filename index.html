@@ -21,7 +21,7 @@
     <link rel="apple-touch-icon" href="./icone.svg" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <link rel="stylesheet" href="./style.css?v=6" />
+    <link rel="stylesheet" href="./style.css?v=7" />
   </head>
   <body>
     <div class="app">
@@ -94,12 +94,23 @@
       <section class="deep" id="deep"></section>
     </div>
 
-    <button class="mascote" id="mascote" type="button" aria-label="Mascote">
+    <button class="mascote" id="mascote" type="button" aria-label="Leitura do mercado">
       <span class="mascote-corpo">
         <img src="./mascote.png" alt="" id="mascoteImg" />
       </span>
+      <span class="mascote-selo" id="mascoteSelo" hidden>0</span>
     </button>
 
-    <script type="module" src="./app.js?v=6"></script>
+    <div class="balao" id="balao" hidden>
+      <div class="balao-topo">
+        <span class="lbl">LEITURA</span>
+        <button class="balao-x" id="balaoFechar" type="button" aria-label="Fechar">×</button>
+      </div>
+      <div class="balao-leitura" id="balaoLeitura"></div>
+      <div class="balao-cab"><span class="lbl">O QUE EU VI</span></div>
+      <div class="balao-lista" id="balaoLista"></div>
+    </div>
+
+    <script type="module" src="./app.js?v=7"></script>
   </body>
 </html>

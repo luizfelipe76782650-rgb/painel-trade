@@ -8,7 +8,7 @@ import {
   varrer,
   volumeProfile,
   zoneStats,
-} from "./analysis.js?v=6";
+} from "./analysis.js?v=7";
 import {
   CATEGORIES,
   assetSource,
@@ -22,7 +22,7 @@ import {
   spotGold,
   tape,
   universe,
-} from "./feed.js?v=6";
+} from "./feed.js?v=7";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const el = (id) => document.getElementById(id);
@@ -108,6 +108,7 @@ let poller = null;
 let lastAnalysis = 0;
 let lastPaint = 0;
 let lastDeep = 0;
+let lastBalao = 0;
 const sig = {}; // last markup written per block, so we only rewrite on change
 
 // ---------------------------------------------------------------- operação
@@ -726,6 +727,11 @@ if ("serviceWorker" in navigator) {
   lastPaint = now;
   paint();
 
+  if (!el("balao").hidden && now - lastBalao >= 2000) {
+    lastBalao = now;
+    renderBalao();
+  }
+
   if (now - lastDeep >= DEEP_MS / 30) {
     lastDeep = now;
     const all = state.data.candles;
@@ -761,6 +767,7 @@ function recompute() {
 
   state.aberta = manageTrade(state.analysis, candles, fechou);
   renderSide();
+  vigiar();
 }
 
 function paint() {
@@ -783,6 +790,7 @@ function paint() {
   paintGauge();
   paintBars();
   paintBook(data.book, shown.price);
+  pintarMascote();
 
   const all = data.candles;
   const count = Math.min(state.view.count, all.length);
@@ -1962,9 +1970,323 @@ function renderBaleias() {
   );
 }
 
+// ---------------------------------------------------------------- mascote
+/**
+ * The mascot watches what the panel notices while you are looking elsewhere.
+ *
+ * Everything here is read from state the panel already computes — nothing is
+ * polled for it. An event is only raised when something actually changed, so
+ * the badge means "this happened", not "time passed".
+ */
+const AVISOS_MAX = 40;
+
+const vigia = {
+  lista: [],
+  naoLidos: 0,
+  /** Last seen values, so a change can be told apart from a repeat. */
+  visto: {
+    aberta: null,
+    ultima: null,
+    pendente: null,
+    funding: null,
+    divergencia: null,
+    baleia: null,
+  },
+
+  add(tipo, texto, cor) {
+    vigia.lista.push({ tipo, texto, cor, quando: Date.now() });
+    if (vigia.lista.length > AVISOS_MAX) vigia.lista.shift();
+    vigia.naoLidos++;
+    pulsar(tipo);
+  },
+};
+
+/** A short physical reaction, so an event registers even from the corner. */
+function pulsar(tipo) {
+  const m = el("mascote");
+  if (!m) return;
+  const classe = tipo === "stop" ? "treme" : tipo === "alvo" ? "pula" : "chama";
+  m.classList.remove("treme", "pula", "chama");
+  void m.offsetWidth; // restart the animation
+  m.classList.add(classe);
+  setTimeout(() => m.classList.remove(classe), 1200);
+}
+
+function vigiar() {
+  const v = vigia.visto;
+  const ativo = state.symbol.replace(/^f:/, "");
+
+  // uma operação abriu
+  const chaveAberta = state.aberta ? `${state.aberta.side}:${state.aberta.abertura}` : null;
+  if (chaveAberta && chaveAberta !== v.aberta) {
+    const a = state.aberta;
+    vigia.add(
+      "entrada",
+      `${a.side.toUpperCase()} em ${ativo} a ${fmt(a.entrada)} · stop ${fmt(a.stop)} · alvo ${fmt(
+        a.alvo
+      )} · R:R 1:${a.rr.toFixed(1)}`,
+      a.side === "compra" ? UP : DOWN
+    );
+  }
+  v.aberta = chaveAberta;
+
+  // um sinal está esperando a barra fechar
+  const chavePendente = state.pendente ? `${state.pendente.side}:${state.barTime}` : null;
+  if (chavePendente && chavePendente !== v.pendente) {
+    vigia.add(
+      "pendente",
+      `Sinal de ${state.pendente.side} em ${ativo} aguardando o fechamento da barra`,
+      WARN
+    );
+  }
+  v.pendente = chavePendente;
+
+  // uma operação terminou
+  const chaveUltima = state.ultima ? `${state.ultima.abertura}:${state.ultima.resultado}` : null;
+  if (chaveUltima && chaveUltima !== v.ultima) {
+    const u = state.ultima;
+    const ok = u.resultado === "alvo";
+    vigia.add(
+      ok ? "alvo" : "stop",
+      `${ok ? "Alvo atingido" : "Stop atingido"} em ${ativo}: ${u.side} de ${fmt(
+        u.entrada
+      )} · ${ok ? "+" + u.rr.toFixed(2) : "−1.00"}R`,
+      ok ? UP : DOWN
+    );
+  }
+  v.ultima = chaveUltima;
+
+  if (state.pos) {
+    // o funding trocou de lado
+    const sinal = state.pos.funding == null ? null : Math.sign(state.pos.funding);
+    if (sinal !== null && v.funding !== null && sinal !== v.funding) {
+      vigia.add(
+        "funding",
+        `Funding de ${ativo} virou para ${sinal > 0 ? "positivo" : "negativo"} (${(
+          state.pos.funding * 100
+        ).toFixed(4)}%) — agora quem paga são os ${sinal > 0 ? "comprados" : "vendidos"}`,
+        sinal > 0 ? DOWN : UP
+      );
+    }
+    if (sinal !== null) v.funding = sinal;
+
+    // varejo e grandes passaram a discordar
+    const d = divergencia();
+    if (d && d.chave !== v.divergencia) {
+      vigia.add("divergencia", d.texto, d.cor);
+    }
+    v.divergencia = d ? d.chave : null;
+  }
+
+  // um negócio grande passou na fita
+  const b = maiorBaleia();
+  if (b && b.chave !== v.baleia) {
+    if (v.baleia !== null) {
+      vigia.add(
+        "baleia",
+        `Negócio grande em ${ativo}: ${b.lado ? "compra" : "venda"} de ${short(b.qty)} a ${fmt(
+          b.price
+        )}`,
+        b.lado ? UP : DOWN
+      );
+    }
+    v.baleia = b.chave;
+  }
+}
+
+/** The disagreement between the crowd and the size, when there is one. */
+function divergencia() {
+  const p = state.pos;
+  if (!p?.contas || !p?.grandes) return null;
+
+  const varejo = p.contas.compradas - 0.5;
+  const size = p.grandes.compradas - 0.5;
+  if (varejo * size >= 0 || Math.abs(varejo) < 0.03 || Math.abs(size) < 0.03) return null;
+
+  const lado = size > 0 ? "comprados" : "vendidos";
+  return {
+    chave: size > 0 ? "grandes-comprados" : "grandes-vendidos",
+    cor: size > 0 ? UP : DOWN,
+    texto: `Varejo ${varejo > 0 ? "comprado" : "vendido"} e grandes ${lado} — ${(
+      p.grandes.compradas * 100
+    ).toFixed(0)}% contra ${(p.contas.compradas * 100).toFixed(0)}%`,
+  };
+}
+
+/** The biggest print in the window, when it clears the noise. */
+function maiorBaleia() {
+  const fita = state.trades;
+  if (fita.length < 40) return null;
+
+  const tamanhos = fita.map((t) => t.qty).sort((a, b) => a - b);
+  const mediana = tamanhos[Math.floor(tamanhos.length / 2)] || 0;
+  const corte = mediana * 8;
+  if (!(corte > 0)) return null;
+
+  for (let i = fita.length - 1; i >= 0; i--) {
+    const t = fita[i];
+    if (t.qty >= corte) {
+      return { chave: `${t.price}:${t.qty}`, qty: t.qty, price: t.price, lado: t.buyerAggressor };
+    }
+  }
+  return null;
+}
+
+/**
+ * The whole panel said out loud.
+ *
+ * It reads from the same numbers the cards show, in the order a person would
+ * ask: where the price is, what the structure says, who is positioned how, and
+ * whether this reading has worked here before.
+ */
+function lerMercado() {
+  const r = state.analysis;
+  const ativo = state.symbol.replace(/^f:/, "");
+  if (!r || !state.data) return ["Ainda carregando os dados."];
+
+  const frases = [];
+  const preco = fmt(shown.price);
+  const chg = state.data.stats.changePct;
+
+  frases.push(
+    `<b>${ativo}</b> a <b>${preco}</b>, ${chg >= 0 ? "subindo" : "caindo"} ${Math.abs(chg).toFixed(
+      2
+    )}% no dia, no gráfico de ${state.timeframe}.`
+  );
+
+  const motivos = r.reasons.filter((m) => m !== "Sem sinais relevantes");
+  if (motivos.length) {
+    frases.push(`A leitura vê: ${motivos.join("; ").toLowerCase()}.`);
+  } else {
+    frases.push("Não há nada de estrutural chamando atenção agora.");
+  }
+
+  const bias = r.score >= 58 ? "comprador" : r.score <= 42 ? "vendedor" : "neutro";
+  frases.push(
+    `Placar de confluência <b>${r.score}</b> — viés ${bias}.` +
+      (state.aberta
+        ? ` Há uma <b>${state.aberta.side}</b> aberta desde ${fmt(state.aberta.entrada)}, com stop em ${fmt(
+            state.aberta.stop
+          )} e alvo em ${fmt(state.aberta.alvo)}.`
+        : state.pendente
+          ? ` Um sinal de <b>${state.pendente.side}</b> espera a barra fechar.`
+          : ` ${r.plan?.motivo || "Sem operação no momento"}.`)
+  );
+
+  const p = state.pos;
+  if (p?.grandes && p?.contas) {
+    const d = divergencia();
+    frases.push(
+      `Nos futuros, as maiores posições estão <b>${(p.grandes.compradas * 100).toFixed(
+        0
+      )}% compradas</b> e as contas em geral ${(p.contas.compradas * 100).toFixed(0)}%.` +
+        (d ? " Os dois lados discordam." : "") +
+        (p.funding != null
+          ? ` O funding está em ${(p.funding * 100).toFixed(4)}%, então quem paga são os ${
+              p.funding >= 0 ? "comprados" : "vendidos"
+            }.`
+          : "")
+    );
+  }
+
+  if (state.bt) {
+    const b = state.bt;
+    frases.push(
+      `Nas últimas ${b.barras} barras deste gráfico, esta mesma leitura teria feito <b>${
+        b.total
+      } operações</b> com ${b.taxa.toFixed(0)}% de acerto e <b>${b.r >= 0 ? "+" : ""}${b.r.toFixed(
+        1
+      )}R</b> de resultado.` + (b.r < 0 ? " Aqui ela vem perdendo — cuidado." : "")
+    );
+  }
+
+  return frases;
+}
+
+/** Ring colour: the panel's traffic light, readable from the corner. */
+function corDoMascote() {
+  if (state.aberta) return state.aberta.side === "compra" ? UP : DOWN;
+  if (state.pendente) return WARN;
+  if (state.ultima) return state.ultima.resultado === "alvo" ? UP : DOWN;
+  return "#14b8a6";
+}
+
+function pintarMascote() {
+  const m = el("mascote");
+  if (!m) return;
+
+  m.style.background = corDoMascote();
+  const selo = el("mascoteSelo");
+  if (!selo) return;
+
+  selo.textContent = vigia.naoLidos > 9 ? "9+" : String(vigia.naoLidos);
+  selo.hidden = vigia.naoLidos === 0;
+}
+
+function renderBalao() {
+  const leitura = lerMercado()
+    .map((f) => `<p>${f}</p>`)
+    .join("");
+
+  const lista = vigia.lista.length
+    ? [...vigia.lista]
+        .reverse()
+        .map(
+          (a) => `<div class="aviso">
+            <span class="aviso-ponto" style="background:${a.cor}"></span>
+            <div class="aviso-corpo">
+              <span class="aviso-texto">${esc(a.texto)}</span>
+              <span class="aviso-hora">${new Date(a.quando).toLocaleTimeString("pt-BR", {
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+              })}</span>
+            </div>
+          </div>`
+        )
+        .join("")
+    : `<div class="vazio">Nada aconteceu ainda. Vou avisar quando um sinal confirmar,
+       um stop ou alvo bater, o funding virar ou passar um negócio grande.</div>`;
+
+  el("balaoLeitura").innerHTML = leitura;
+  el("balaoLista").innerHTML = lista;
+}
+
+function abrirBalao() {
+  const b = el("balao");
+  const aberto = !b.hidden;
+
+  if (aberto) {
+    b.hidden = true;
+    return;
+  }
+
+  renderBalao();
+  b.hidden = false;
+  vigia.naoLidos = 0;
+  pintarMascote();
+}
+
+function ligarMascote() {
+  el("mascote")?.addEventListener("click", abrirBalao);
+  el("balaoFechar")?.addEventListener("click", () => (el("balao").hidden = true));
+
+  document.addEventListener("click", (e) => {
+    const b = el("balao");
+    if (b.hidden) return;
+    if (e.target.closest("#balao") || e.target.closest("#mascote")) return;
+    b.hidden = true;
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") el("balao").hidden = true;
+  });
+}
+
 // ---------------------------------------------------------------- start
 mount();
 mountDeep();
+ligarMascote();
 buildControls();
 status("", "conectando…");
 start();

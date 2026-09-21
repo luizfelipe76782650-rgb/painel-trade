@@ -1482,3 +1482,215 @@ button {
     bottom: calc(12px + env(safe-area-inset-bottom, 0px));
   }
 }
+
+/* ---------- mascote: reações e selo ---------- */
+@keyframes treme {
+  0%,
+  100% {
+    margin-right: 0;
+  }
+  20%,
+  60% {
+    margin-right: 7px;
+  }
+  40%,
+  80% {
+    margin-right: -7px;
+  }
+}
+
+@keyframes pula {
+  0%,
+  100% {
+    margin-bottom: 0;
+  }
+  35% {
+    margin-bottom: 16px;
+  }
+  70% {
+    margin-bottom: 4px;
+  }
+}
+
+@keyframes chama {
+  0%,
+  100% {
+    filter: none;
+  }
+  50% {
+    filter: brightness(1.5);
+  }
+}
+
+@keyframes selo-entra {
+  from {
+    transform: scale(0);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+/* the float already owns transform, so the reactions move it by margin */
+.mascote.treme {
+  animation: pulseBorder 2.4s ease-in-out infinite, treme 0.45s ease-in-out 2;
+}
+
+.mascote.pula {
+  animation: pulseBorder 2.4s ease-in-out infinite, pula 0.5s ease-out 2;
+}
+
+.mascote.chama {
+  animation: pulseBorder 0.6s ease-in-out 2, floatY 3.2s ease-in-out infinite,
+    chama 0.6s ease-in-out 2;
+}
+
+.mascote-selo {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 10px;
+  background: var(--down);
+  color: #fff;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+  border: 2px solid var(--bg);
+  animation: selo-entra 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* ---------- balão ---------- */
+.balao {
+  position: fixed;
+  right: 16px;
+  bottom: calc(100px + env(safe-area-inset-bottom, 0px));
+  width: min(340px, calc(100vw - 32px));
+  max-height: min(520px, calc(100vh - 160px));
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.6);
+  z-index: 41;
+  overflow: hidden;
+  animation: sobe 0.25s ease both;
+}
+
+.balao-topo,
+.balao-cab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+
+.balao-cab {
+  border-top: 1px solid var(--line);
+  border-bottom: 0;
+  background: var(--panel-2);
+}
+
+.balao-x {
+  width: 24px;
+  height: 24px;
+  border: 0;
+  background: none;
+  color: var(--dim);
+  font-size: 18px;
+  line-height: 1;
+  border-radius: 6px;
+}
+
+.balao-x:hover {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.balao-leitura {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+}
+
+.balao-leitura p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.balao-leitura b {
+  color: var(--text);
+}
+
+.balao-lista {
+  overflow-y: auto;
+  padding: 6px 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-height: 0;
+}
+
+.aviso {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  animation: sobe 0.25s ease both;
+}
+
+.aviso-ponto {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-top: 5px;
+  flex-shrink: 0;
+}
+
+.aviso-corpo {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.aviso-texto {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.aviso-hora {
+  font-size: 9.5px;
+  color: var(--dim);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mascote.treme,
+  .mascote.pula,
+  .mascote.chama,
+  .mascote-selo,
+  .balao,
+  .aviso {
+    animation: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .balao {
+    right: 12px;
+    left: 12px;
+    width: auto;
+    bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+  }
+}
