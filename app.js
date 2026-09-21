@@ -193,8 +193,8 @@ function mount() {
   el("hdr").innerHTML = `
     <span id="hPrice" style="font-size:20px;font-weight:600">—</span>
     <span id="hChange" style="font-size:12px"></span>
-    <span id="hCvd" class="chip" hidden><i></i><span></span></span>
     <span id="hSpot" class="chip" hidden><i></i><span></span></span>
+    <span id="hCvd" class="chip" hidden><i></i><span></span></span>
     <span id="hAtr" style="font-size:10px;color:var(--dim)"></span>`;
 
   el("side").innerHTML = `
