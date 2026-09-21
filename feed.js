@@ -52,13 +52,13 @@ export const CATEGORIES = [
   {
     id: "ia",
     classe: "Cripto",
-    label: "IA & dados",
+    label: "IA e dados",
     assets: ["FET", "RENDER", "TAO", "GRT", "AR", "FIL", "THETA", "WLD", "ARKM", "NFP", "PHB"],
   },
   {
     id: "games",
     classe: "Cripto",
-    label: "Games & metaverso",
+    label: "Games",
     assets: ["AXS", "SAND", "MANA", "GALA", "IMX", "ENJ", "APE", "BEAMX", "PIXEL", "ACE", "YGG"],
   },
   { id: "todascripto", classe: "Cripto", label: "Todas as moedas", todos: "cripto" },
@@ -82,36 +82,46 @@ export const CATEGORIES = [
   {
     id: "acoesia",
     classe: "Ações",
-    label: "IA & software",
+    label: "Software e IA",
     assets: ["f:PLTR", "f:SNOW", "f:MDB", "f:DDOG", "f:NET", "f:CRWD", "f:PANW", "f:CRM",
              "f:ADBE", "f:NOW", "f:TEAM", "f:IONQ", "f:ANTHROPIC", "f:OPENAI", "f:ZS"],
   },
   {
-    id: "acoescripto",
+    id: "acoesfin",
     classe: "Ações",
-    label: "Cripto & fintech",
+    label: "Finanças e cripto",
     assets: ["f:COIN", "f:MSTR", "f:HOOD", "f:CRCL", "f:MARA", "f:HUT", "f:BMNR", "f:IREN",
              "f:PYPL", "f:SOFI", "f:V", "f:JPM", "f:GS", "f:BX"],
   },
   {
     id: "acoesconsumo",
     classe: "Ações",
-    label: "Consumo & saúde",
+    label: "Consumo e saúde",
     assets: ["f:WMT", "f:COST", "f:KO", "f:HD", "f:DIS", "f:NFLX", "f:UBER", "f:SHOP",
              "f:EBAY", "f:BABA", "f:PDD", "f:SONY", "f:LLY", "f:MRK", "f:MRNA", "f:CAT",
              "f:GME", "f:AMC", "f:DKNG"],
   },
-  { id: "todasacoes", classe: "Ações", label: "Todos os contratos", todos: "futuros" },
+  { id: "todasacoes", classe: "Ações", label: "Todas as ações", todos: "futuros" },
 
   {
     id: "indices",
-    classe: "Índices & ETFs",
-    label: "Índices & ETFs",
-    assets: ["f:SPY", "f:QQQ", "f:IWM", "f:SMH", "f:GDX", "f:XLE", "f:XBI", "f:TQQQ",
-             "f:SQQQ", "f:SOXL", "f:SOXS", "f:UVXY", "f:EWZ", "f:EWJ"],
+    classe: "Índices e ETFs",
+    label: "Índices",
+    assets: ["f:SPY", "f:QQQ", "f:IWM", "f:EWZ", "f:EWJ", "f:EWY", "f:EWT", "f:KODEX200"],
   },
-
-  { id: "cambio", classe: "Câmbio", label: "Moedas", assets: ["EUR", "GBP", "AUD", "JPY", "TRY"] },
+  {
+    id: "setores",
+    classe: "Índices e ETFs",
+    label: "Setores",
+    assets: ["f:SMH", "f:GDX", "f:XLE", "f:XBI", "f:URNM", "f:BITO"],
+  },
+  {
+    id: "alavancados",
+    classe: "Índices e ETFs",
+    label: "Alavancados",
+    assets: ["f:TQQQ", "f:SQQQ", "f:SOXL", "f:SOXS", "f:UVXY", "f:TSLL", "f:NVDL",
+             "f:TBT", "f:TMF", "f:TZA", "f:KORU"],
+  },
 ];
 
 export const TF_SECONDS = { "1m": 60, "5m": 300, "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400 };
