@@ -10,7 +10,7 @@ import {
   varrer,
   volumeProfile,
   zoneStats,
-} from "./analysis.js?v=15";
+} from "./analysis.js?v=16";
 import {
   CATEGORIES,
   assetSource,
@@ -24,7 +24,7 @@ import {
   spotGold,
   tape,
   universe,
-} from "./feed.js?v=15";
+} from "./feed.js?v=16";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const el = (id) => document.getElementById(id);
@@ -1316,13 +1316,33 @@ function drawPills(result, aberta, y, g) {
 
   // the svg now matches the wrapper pixel for pixel, so the axis gutter is a
   // plain pixel offset again
+  const ALTURA = 15;
+  const ocupados = { left: [], right: [] };
+  const livre = (side, v) => !ocupados[side].some((o) => Math.abs(o - v) < ALTURA);
+
   const pill = (side, yy, bg, text) => {
     // a level scrolled out of the price band has no line on screen, so it gets
     // no tag either — otherwise the tag rides out over the header
     if (yy < g.PT + 7 || yy > g.priceBot - 7) return;
+
+    /**
+     * Two levels at the same price — an entry and a stop moved to breakeven —
+     * would stack their tags and hide one. The line stays at the true price;
+     * only the tag steps aside, upward first, so a stop that came up to the
+     * entry reads as having moved.
+     */
+    let pos = yy;
+    for (let i = 1; i <= 6 && !livre(side, pos); i++) {
+      const acima = yy - i * ALTURA;
+      const abaixo = yy + i * ALTURA;
+      if (acima > g.PT + 7 && livre(side, acima)) pos = acima;
+      else if (abaixo < g.priceBot - 7 && livre(side, abaixo)) pos = abaixo;
+    }
+    ocupados[side].push(pos);
+
     parts.push(
       `<div class="pill" style="${side}:${side === "right" ? g.PR + 4 : 4}px;` +
-        `top:${((yy / g.H) * 100).toFixed(2)}%;background:${bg}">${esc(text)}</div>`
+        `top:${((pos / g.H) * 100).toFixed(2)}%;background:${bg}">${esc(text)}</div>`
     );
   };
 
@@ -1343,13 +1363,13 @@ function drawPills(result, aberta, y, g) {
   if (aberta) {
     const col = aberta.side === "compra" ? UP : DOWN;
     pill("right", y(aberta.alvo), WARN, `ALVO ${val(aberta.alvo)}`);
+    pill("right", y(aberta.entrada), col, `${aberta.side.toUpperCase()} ${val(aberta.entrada)}`);
     pill(
       "right",
       y(aberta.stop),
       aberta.empatou ? WARN : DOWN,
-      `${aberta.empatou ? "STOP ✓" : "STOP"} ${val(aberta.stop)}`
+      `${aberta.empatou ? "STOP ✓ ZERO A ZERO" : "STOP"} ${val(aberta.stop)}`
     );
-    pill("right", y(aberta.entrada), col, `${aberta.side.toUpperCase()} ${val(aberta.entrada)}`);
   }
 
   swap(R.pills, "pills", parts.join(""));
