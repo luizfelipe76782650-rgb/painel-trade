@@ -12,7 +12,7 @@ import {
   varrer,
   volumeProfile,
   zoneStats,
-} from "./analysis.js?v=23";
+} from "./analysis.js?v=24";
 import {
   CATEGORIES,
   JANELA,
@@ -27,7 +27,7 @@ import {
   spotGold,
   tape,
   universe,
-} from "./feed.js?v=23";
+} from "./feed.js?v=24";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const el = (id) => document.getElementById(id);
@@ -984,9 +984,11 @@ function planBody(aberta, plano) {
           <div class="v">${fmt(aberta.entrada)}</div></div>
         <div class="tile"><div class="t" style="color:var(--down-soft)">STOP</div>
           <div class="v">${fmt(aberta.stop)}</div></div>
-        <div class="tile"><div class="t" style="color:${WARN}">ALVO</div>
+        <div class="tile"><div class="t" style="color:${WARN}">REFERÊNCIA</div>
           <div class="v">${fmt(aberta.alvo)}</div></div>
-      </div>`;
+      </div>
+      <div class="nota">Sem alvo fixo: a operação sai quando o stop móvel for atingido.
+        A referência é só o nível que a estrutura sugeria.</div>`;
   }
 
   if (state.pendente) {
@@ -1253,7 +1255,17 @@ function drawChart(result, candles, price, aberta) {
         "stroke-width": 1.4,
         ...(dash ? { "stroke-dasharray": dash } : {}),
       });
-    level(aberta.alvo, WARN, "7 4");
+    // a reference the trade no longer closes at, drawn faintly to say so
+    add("line", {
+      x1: 0,
+      x2: right,
+      y1: y(aberta.alvo),
+      y2: y(aberta.alvo),
+      stroke: WARN,
+      "stroke-width": 1,
+      "stroke-dasharray": "2 6",
+      opacity: 0.4,
+    });
 
     // where the stop began, so the move is visible rather than assumed
     if (aberta.stopInicial && aberta.stopInicial !== aberta.stop) {
@@ -1385,7 +1397,7 @@ function drawPills(result, aberta, y, g) {
 
   if (aberta) {
     const col = aberta.side === "compra" ? UP : DOWN;
-    pill("right", y(aberta.alvo), WARN, `ALVO ${val(aberta.alvo)}`);
+    pill("right", y(aberta.alvo), WARN, `REF ${val(aberta.alvo)}`);
     pill("right", y(aberta.entrada), col, `${aberta.side.toUpperCase()} ${val(aberta.entrada)}`);
     pill(
       "right",
