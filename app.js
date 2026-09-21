@@ -24,7 +24,7 @@ const el = (id) => document.getElementById(id);
 
 const POLL_STREAM = 20000; // socket alive: REST only corrects drift
 const POLL_REST = 3000; // no socket: REST is the only source
-const POLL_RELAY = 15000; // a public relay is not worth hammering
+const POLL_FUTUROS = 2500; // futures have no usable socket, so REST carries it
 const ANALYSIS_MS = 1200; // zones and score settle instead of flickering
 const PAINT_MS = 40; // 25 redraws a second
 
@@ -53,7 +53,7 @@ const TRADE_WINDOW = 600;
 const FLOW_BARS = { "1m": 20, "5m": 18, "15m": 16, "1h": 12, "4h": 12, "1d": 10 };
 
 /** Gold tokens, shown against the real spot price rather than on their own. */
-const OURO = new Set(["XAU", "PAXG", "XAUT"]);
+const OURO = new Set(["f:XAU", "PAXG", "XAUT"]);
 
 const state = {
   symbol: "BTC",
@@ -458,10 +458,11 @@ function reload() {
 async function fillSymbols() {
   const all = await universe();
   const group = CATEGORIES.find((c) => c.id === state.category);
-  const list =
-    group && group.assets
-      ? group.assets.map((id) => all.find((a) => a.id === id)).filter(Boolean)
-      : all;
+  const list = group.assets
+    ? group.assets.map((id) => all.find((a) => a.id === id)).filter(Boolean)
+    : group.todos === "futuros"
+      ? all.filter((a) => a.id.startsWith("f:"))
+      : all.filter((a) => !a.id.startsWith("f:"));
 
   if (!list.length) return;
 
@@ -576,8 +577,8 @@ function start() {
   pullSpot();
   const ritmo = socket.live
     ? POLL_STREAM
-    : assetSource(state.symbol) === "yahoo"
-      ? POLL_RELAY
+    : assetSource(state.symbol) === "futures"
+      ? POLL_FUTUROS
       : POLL_REST;
   poller = setInterval(pull, ritmo);
 }

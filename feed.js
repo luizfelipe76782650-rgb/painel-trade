@@ -61,11 +61,56 @@ export const CATEGORIES = [
     label: "Games & metaverso",
     assets: ["AXS", "SAND", "MANA", "GALA", "IMX", "ENJ", "APE", "BEAMX", "PIXEL", "ACE", "YGG"],
   },
-  { id: "todas", classe: "Cripto", label: "Todas as moedas", assets: null },
+  { id: "todascripto", classe: "Cripto", label: "Todas as moedas", todos: "cripto" },
 
-  // gold that actually trades on the exchange: each token is backed by an ounce
-  // and tracks XAU/USD, which is the closest thing to XAUUSD available here
-  { id: "ouro", classe: "Commodities", label: "Ouro", assets: ["XAU", "PAXG", "XAUT"] },
+  {
+    id: "metais",
+    classe: "Commodities",
+    label: "Metais",
+    assets: ["f:XAU", "f:XAG", "f:XPT", "f:XPD", "f:COPPER"],
+  },
+  { id: "energia", classe: "Commodities", label: "Energia", assets: ["f:CL", "f:BZ", "f:NATGAS"] },
+  { id: "ourotoken", classe: "Commodities", label: "Ouro tokenizado", assets: ["PAXG", "XAUT"] },
+
+  {
+    id: "acoestec",
+    classe: "Ações",
+    label: "Tecnologia",
+    assets: ["f:NVDA", "f:AAPL", "f:MSFT", "f:GOOGL", "f:AMZN", "f:META", "f:TSLA", "f:AMD",
+             "f:AVGO", "f:ORCL", "f:INTC", "f:QCOM", "f:TSM", "f:ASML", "f:ARM", "f:MU",
+             "f:SMCI", "f:DELL", "f:CSCO", "f:IBM"],
+  },
+  {
+    id: "acoesia",
+    classe: "Ações",
+    label: "IA & software",
+    assets: ["f:PLTR", "f:SNOW", "f:MDB", "f:DDOG", "f:NET", "f:CRWD", "f:PANW", "f:CRM",
+             "f:ADBE", "f:NOW", "f:TEAM", "f:IONQ", "f:ANTHROPIC", "f:OPENAI", "f:ZS"],
+  },
+  {
+    id: "acoescripto",
+    classe: "Ações",
+    label: "Cripto & fintech",
+    assets: ["f:COIN", "f:MSTR", "f:HOOD", "f:CRCL", "f:MARA", "f:HUT", "f:BMNR", "f:IREN",
+             "f:PYPL", "f:SOFI", "f:V", "f:JPM", "f:GS", "f:BX"],
+  },
+  {
+    id: "acoesconsumo",
+    classe: "Ações",
+    label: "Consumo & saúde",
+    assets: ["f:WMT", "f:COST", "f:KO", "f:HD", "f:DIS", "f:NFLX", "f:UBER", "f:SHOP",
+             "f:EBAY", "f:BABA", "f:PDD", "f:SONY", "f:LLY", "f:MRK", "f:MRNA", "f:CAT",
+             "f:GME", "f:AMC", "f:DKNG"],
+  },
+  { id: "todasacoes", classe: "Ações", label: "Todos os contratos", todos: "futuros" },
+
+  {
+    id: "indices",
+    classe: "Índices & ETFs",
+    label: "Índices & ETFs",
+    assets: ["f:SPY", "f:QQQ", "f:IWM", "f:SMH", "f:GDX", "f:XLE", "f:XBI", "f:TQQQ",
+             "f:SQQQ", "f:SOXL", "f:SOXS", "f:UVXY", "f:EWZ", "f:EWJ"],
+  },
 
   { id: "cambio", classe: "Câmbio", label: "Moedas", assets: ["EUR", "GBP", "AUD", "JPY", "TRY"] },
 ];
@@ -226,120 +271,53 @@ const kraken = {
 };
 
 /**
- * Yahoo publishes candles but sends no CORS header, so a page cannot read it
- * directly. These public relays fetch it server side and add the header. They
- * are free and occasionally flaky, hence more than one.
+ * Binance USDⓈ-M futures.
+ *
+ * Besides crypto perpetuals it lists TRADIFI contracts — gold, silver, oil,
+ * and a few hundred equities and ETFs — and publishes the same shape of data
+ * as the spot venue: taker volume per candle, the aggressor side of each
+ * print, and the book. So these assets get the whole panel, not a price line.
  */
-const RELAYS = [
-  {
-    // returns the page as text behind a short preamble, so the JSON starts at
-    // the first brace
-    url: (u) => `https://r.jina.ai/${u}`,
-    read: (txt) => JSON.parse(txt.slice(txt.indexOf('{"'))),
-  },
-  {
-    url: (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-    read: JSON.parse,
-  },
-  {
-    url: (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
-    read: JSON.parse,
-  },
-];
+const FAPI = "https://fapi.binance.com/fapi/v1";
 
-async function relayed(url) {
-  let erro = new Error("nenhum repassador respondeu");
-
-  for (const relay of RELAYS) {
-    try {
-      const res = await fetch(relay.url(url));
-      if (!res.ok) throw new Error(String(res.status));
-      return relay.read(await res.text());
-    } catch (e) {
-      erro = e;
-    }
-  }
-
-  throw erro;
-}
-
-// Yahoo has no 4h bar, so it is folded from hourly ones
-const YF = {
-  "1m": { interval: "1m", range: "1d" },
-  "5m": { interval: "5m", range: "5d" },
-  "15m": { interval: "15m", range: "5d" },
-  "1h": { interval: "60m", range: "1mo" },
-  "4h": { interval: "60m", range: "3mo", fold: 4 },
-  "1d": { interval: "1d", range: "1y" },
-};
-
-function fold(candles, n) {
-  const out = [];
-  for (let i = 0; i < candles.length; i += n) {
-    const bloco = candles.slice(i, i + n);
-    if (!bloco.length) continue;
-    out.push({
-      time: bloco[0].time,
-      open: bloco[0].open,
-      high: Math.max(...bloco.map((c) => c.high)),
-      low: Math.min(...bloco.map((c) => c.low)),
-      close: bloco[bloco.length - 1].close,
-      volume: bloco.reduce((a, c) => a + c.volume, 0),
-    });
-  }
-  return out;
-}
-
-async function yahooChart(sym, tf) {
-  const cfg = YF[tf] || YF["1h"];
-  const d = await relayed(
-    `https://query1.finance.yahoo.com/v8/finance/chart/${sym}` +
-      `?interval=${cfg.interval}&range=${cfg.range}`
-  );
-
-  const r = d?.chart?.result?.[0];
-  if (!r) throw new Error(d?.chart?.error?.description || "sem dados");
-
-  const q = r.indicators.quote[0];
-  let candles = r.timestamp
-    .map((t, i) => ({
-      time: t * 1000,
-      open: q.open[i],
-      high: q.high[i],
-      low: q.low[i],
-      close: q.close[i],
-      volume: q.volume[i] || 0,
-    }))
-    // Yahoo pads gaps with nulls; a null candle is a hole, not a price
-    .filter((c) => c.open != null && c.close != null && c.high != null && c.low != null);
-
-  if (cfg.fold) candles = fold(candles, cfg.fold);
-  return { candles: candles.slice(-300), meta: r.meta };
-}
-
-const yahoo = {
-  name: "Yahoo",
-  key: "yahoo",
+const futures = {
+  name: "Binance Futuros",
+  key: "futures",
 
   async candles(sym, tf) {
-    return (await yahooChart(sym, tf)).candles;
+    const raw = await getJson(`${FAPI}/klines?symbol=${sym}&interval=${tf}&limit=300`);
+    return raw.map((k) => {
+      const volume = +k[5];
+      const buy = +k[9];
+      return {
+        time: k[0],
+        open: +k[1],
+        high: +k[2],
+        low: +k[3],
+        close: +k[4],
+        volume,
+        delta: buy - (volume - buy),
+      };
+    });
   },
 
   async stats(sym) {
-    const { meta } = await yahooChart(sym, "1h");
-    const last = meta.regularMarketPrice;
-    // previousClose is the prior session; chartPreviousClose is whatever sat
-    // before the requested range, which on a month of bars is a month-old price
-    const prev = meta.previousClose || meta.chartPreviousClose || last;
-    return { price: last, changePct: prev ? ((last - prev) / prev) * 100 : 0 };
+    const d = await getJson(`${FAPI}/ticker/24hr?symbol=${sym}`);
+    return { price: +d.lastPrice, changePct: +d.priceChangePercent };
   },
 
-  // a futures quote page gives neither the tape nor the book
-  async trades() {
-    return [];
+  async trades(sym) {
+    const raw = await getJson(`${FAPI}/aggTrades?symbol=${sym}&limit=500`);
+    // m marks the buyer as maker, so the aggressor was the seller
+    return raw.map((t) => ({ price: +t.p, qty: +t.q, buyerAggressor: !t.m }));
   },
-  async book() {
-    return null;
+
+  async book(sym) {
+    const d = await getJson(`${FAPI}/depth?symbol=${sym}&limit=20`);
+    return {
+      bids: d.bids.map(([p, q]) => ({ price: +p, qty: +q })),
+      asks: d.asks.map(([p, q]) => ({ price: +p, qty: +q })),
+    };
   },
 };
 
@@ -348,23 +326,14 @@ const PROVIDERS = [binance, coinbase, kraken];
 /** The provider currently answering; stays chosen until it fails. */
 let active = null;
 
+const ASSETS = new Map(SYMBOLS.map((s) => [s.id, s]));
+
 /**
- * Assets that do not live on a crypto exchange.
- *
- * There is no spot XAUUSD feed a browser can reach for free, so gold here is
- * the COMEX front-month future — real OHLC, trading a carry premium above
- * spot. The header shows the spot price beside it, so the gap is on screen
- * rather than hidden behind a familiar ticker.
+ * Futures assets carry an "f:" prefix so a stock ticker can never collide with
+ * a coin of the same name. The prefix is internal: the panel shows the label.
  */
-const EXTRAS = [
-  { id: "XAU", label: "XAU futuro", source: "yahoo", yahoo: "GC=F" },
-];
-
-const ASSETS = new Map([...SYMBOLS, ...EXTRAS].map((s) => [s.id, s]));
-
-/** Which feed serves an asset: "yahoo" for the extras, exchanges otherwise. */
 export function assetSource(id) {
-  return ASSETS.get(id)?.source || "exchange";
+  return id.startsWith("f:") ? "futures" : "exchange";
 }
 
 function symbolFor(provider, id) {
@@ -381,34 +350,50 @@ let listing = null;
 export function universe() {
   if (listing) return listing;
 
-  listing = getJson("https://api.binance.com/api/v3/exchangeInfo")
-    .then((info) => {
-      const out = [];
+  const spot = getJson("https://api.binance.com/api/v3/exchangeInfo").then((info) => {
+    const out = [];
 
-      for (const s of info.symbols) {
-        if (s.status !== "TRADING" || s.quoteAsset !== "USDT") continue;
-        if (s.isSpotTradingAllowed === false) continue;
+    for (const s of info.symbols) {
+      if (s.status !== "TRADING" || s.quoteAsset !== "USDT") continue;
+      if (s.isSpotTradingAllowed === false) continue;
 
-        const base = s.baseAsset;
-        // leveraged tokens track a multiple of a price, not the asset itself
-        if (/(UP|DOWN|BULL|BEAR)$/.test(base) && base.length > 4) continue;
+      const base = s.baseAsset;
+      // leveraged tokens track a multiple of a price, not the asset itself
+      if (/(UP|DOWN|BULL|BEAR)$/.test(base) && base.length > 4) continue;
 
-        const known = ASSETS.get(base);
-        const asset = known || {
-          id: base,
-          label: base,
-          binance: s.symbol,
-          coinbase: `${base}-USD`,
-          kraken: `${base}USD`,
-        };
-        ASSETS.set(base, asset);
-        out.push(asset);
-      }
+      const asset = ASSETS.get(base) || {
+        id: base,
+        label: base,
+        binance: s.symbol,
+        coinbase: `${base}-USD`,
+        kraken: `${base}USD`,
+      };
+      ASSETS.set(base, asset);
+      out.push(asset);
+    }
 
-      out.sort((a, b) => a.id.localeCompare(b.id));
-      return [...EXTRAS, ...out];
-    })
-    .catch(() => [...EXTRAS, ...SYMBOLS]); // the majors still work if the listing fails
+    return out.sort((a, b) => a.id.localeCompare(b.id));
+  });
+
+  // the traditional-finance contracts: metals, energy, equities, ETFs
+  const trad = getJson(`${FAPI}/exchangeInfo`).then((info) => {
+    const out = [];
+
+    for (const s of info.symbols) {
+      if (s.status !== "TRADING" || s.contractType !== "TRADIFI_PERPETUAL") continue;
+      if (s.quoteAsset !== "USDT") continue;
+
+      const asset = { id: `f:${s.baseAsset}`, label: s.baseAsset, futures: s.symbol };
+      ASSETS.set(asset.id, asset);
+      out.push(asset);
+    }
+
+    return out.sort((a, b) => a.label.localeCompare(b.label));
+  });
+
+  listing = Promise.all([spot.catch(() => SYMBOLS), trad.catch(() => [])]).then(
+    ([a, b]) => [...b, ...a]
+  );
 
   return listing;
 }
@@ -419,11 +404,12 @@ export function universe() {
  */
 export async function snapshot(symbolId, timeframe) {
   const ordered =
-    assetSource(symbolId) === "yahoo"
-      ? [yahoo]
+    assetSource(symbolId) === "futures"
+      ? [futures]
       : active
         ? [active, ...PROVIDERS.filter((p) => p !== active)]
         : PROVIDERS;
+
   const failures = [];
 
   for (const provider of ordered) {
@@ -440,7 +426,8 @@ export async function snapshot(symbolId, timeframe) {
 
       if (!candles.length) throw new Error("sem candles");
 
-      active = provider;
+      // the futures venue is not part of the crypto fallback chain
+      if (provider !== futures) active = provider;
       return { candles, stats, trades, book, source: provider.name, failures };
     } catch (err) {
       failures.push(`${provider.name} ${err.message}`);
@@ -572,7 +559,9 @@ const SOCKETS = {
  * to keep polling harder when it does not.
  */
 export function stream(symbolId, timeframe, on) {
-  if (assetSource(symbolId) === "yahoo") return { live: false, close() {} };
+  // the futures socket does not deliver trades or klines reliably, so these
+  // assets are polled instead — the REST feed carries the same numbers
+  if (assetSource(symbolId) === "futures") return { live: false, close() {} };
 
   const provider = active || PROVIDERS[0];
   const open = SOCKETS[provider.key];
